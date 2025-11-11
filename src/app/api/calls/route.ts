@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     .from("houses")
     .select("owner_id, name")
     .eq("id", houseId)
-    .maybeSingle();
+    .maybeSingle<Pick<Database["public"]["Tables"]["houses"]["Row"], "owner_id" | "name">>();
 
   if (houseRow?.owner_id) {
     const { data: residents } = await supabaseAdminClient
