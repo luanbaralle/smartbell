@@ -10,18 +10,10 @@ import {
 
 type ConnectionState = "idle" | "calling" | "ringing" | "connected";
 
-type CandidatePayload = Extract<
-  Omit<SignalingMessage, "from">,
-  { type: "candidate" }
->;
-type OfferPayload = Extract<
-  Omit<SignalingMessage, "from">,
-  { type: "offer" | "answer" }
->;
-type HangupPayload = Extract<
-  Omit<SignalingMessage, "from">,
-  { type: "hangup" }
->;
+type BroadcastPayload = {
+  type: "candidate" | "offer" | "answer" | "hangup";
+  [key: string]: unknown;
+};
 
 export function useAudioCall(
   callId: string | null,
@@ -59,7 +51,7 @@ export function useAudioCall(
     const pc = createPeerConnection({
       onIceCandidate: (candidate) => {
         if (candidate) {
-          const payload: CandidatePayload = {
+          const payload: BroadcastPayload = {
             type: "candidate",
             candidate: candidate.toJSON()
           };
@@ -159,7 +151,7 @@ export function useAudioCall(
       const pc = ensurePeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const payload: OfferPayload = { type: "offer", sdp: offer };
+      const payload: BroadcastPayload = { type: "offer", sdp: offer };
       await sendSignal(payload);
     },
     [callId, ensurePeerConnection, sendSignal, startLocalAudio]
@@ -172,7 +164,7 @@ export function useAudioCall(
     await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    const payload: OfferPayload = { type: "answer", sdp: answer };
+    const payload: BroadcastPayload = { type: "answer", sdp: answer };
     await sendSignal(payload);
     await flushCandidates();
     setPendingOffer(null);
@@ -180,7 +172,7 @@ export function useAudioCall(
   }, [ensurePeerConnection, flushCandidates, pendingOffer, sendSignal, startLocalAudio]);
 
   const hangup = useCallback(async () => {
-    const payload: HangupPayload = { type: "hangup" };
+    const payload: BroadcastPayload = { type: "hangup" };
     await sendSignal(payload);
     cleanup();
   }, [cleanup, sendSignal]);
