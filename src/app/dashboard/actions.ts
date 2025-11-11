@@ -57,15 +57,17 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     throw new Error("Supabase admin client not configured.");
   }
 
+  const updatePayload: Database["public"]["Tables"]["calls"]["Update"] = {
+    status,
+    ended_at:
+      status === "missed" || status === "answered"
+        ? new Date().toISOString()
+        : null
+  };
+
   const { error } = await supabaseAdminClient
     .from("calls")
-    .update<Database["public"]["Tables"]["calls"]["Update"]>({
-      status,
-      ended_at:
-        status === "missed" || status === "answered"
-          ? new Date().toISOString()
-          : null
-    })
+    .update(updatePayload)
     .eq("id", callId);
 
   if (error) {
