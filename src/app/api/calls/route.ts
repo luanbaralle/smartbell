@@ -60,7 +60,8 @@ export async function POST(request: Request) {
       .from("users")
       .select("fcm_token")
       .eq("id", houseRow.owner_id)
-      .not("fcm_token", "is", null);
+      .not("fcm_token", "is", null)
+      .returns<{ fcm_token: string | null }[]>();
 
     const tokens =
       residents
