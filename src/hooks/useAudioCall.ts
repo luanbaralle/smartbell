@@ -20,7 +20,9 @@ export function useAudioCall(callId: string | null, role: "visitor" | "resident"
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const candidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
-  const sendSignalRef = useRef<(message: Omit<SignalingMessage, "from">) => Promise<void>>();
+  const sendSignalRef = useRef<
+    ((message: Omit<SignalingMessage, "from">) => Promise<void>) | null
+  >(null);
 
   const cleanup = useCallback(() => {
     peerConnectionRef.current?.getSenders().forEach((sender) => sender.track?.stop());
