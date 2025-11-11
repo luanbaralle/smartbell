@@ -15,7 +15,15 @@ import {
 
 type ConnectionState = "idle" | "calling" | "ringing" | "connected";
 
-export function useVideoCall(callId: string | null, role: "visitor" | "resident") {
+type BroadcastPayload = {
+  type: "candidate" | "offer" | "answer" | "hangup";
+  [key: string]: unknown;
+};
+
+export function useVideoCall(
+  callId: string | null,
+  role: "visitor" | "resident"
+) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
@@ -25,7 +33,9 @@ export function useVideoCall(callId: string | null, role: "visitor" | "resident"
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const candidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
-  const sendSignalRef = useRef<(message: Omit<SignalingMessage, "from">) => Promise<void>>();
+  const sendSignalRef = useRef<
+    ((message: BroadcastPayload) => Promise<void>) | null
+  >(null);
 
   const cleanup = useCallback(() => {
     peerConnectionRef.current?.getSenders().forEach((sender) => sender.track?.stop());
@@ -46,10 +56,11 @@ export function useVideoCall(callId: string | null, role: "visitor" | "resident"
     const pc = createPeerConnection({
       onIceCandidate: (candidate) => {
         if (candidate) {
-          sendSignalRef.current?.({
+          const payload: BroadcastPayload = {
             type: "candidate",
             candidate: candidate.toJSON()
-          });
+          };
+          sendSignalRef.current?.(payload);
         }
       },
       onTrack: (event) => {
@@ -145,7 +156,8 @@ export function useVideoCall(callId: string | null, role: "visitor" | "resident"
       const pc = ensurePeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await sendSignal({ type: "offer", sdp: offer });
+      const payload: BroadcastPayload = { type: "offer", sdp: offer };
+      await sendSignal(payload);
     },
     [callId, ensurePeerConnection, sendSignal, startLocalMedia]
   );
@@ -157,14 +169,16 @@ export function useVideoCall(callId: string | null, role: "visitor" | "resident"
     await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await sendSignal({ type: "answer", sdp: answer });
+    const payload: BroadcastPayload = { type: "answer", sdp: answer };
+    await sendSignal(payload);
     await flushCandidates();
     setPendingOffer(null);
     setConnectionState("connected");
   }, [ensurePeerConnection, flushCandidates, pendingOffer, sendSignal, startLocalMedia]);
 
   const hangup = useCallback(async () => {
-    await sendSignal({ type: "hangup" });
+    const payload: BroadcastPayload = { type: "hangup" };
+    await sendSignal(payload);
     cleanup();
   }, [cleanup, sendSignal]);
 
