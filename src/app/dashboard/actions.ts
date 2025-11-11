@@ -66,8 +66,8 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
   };
 
   const { error } = await supabaseAdminClient
-    .from("calls")
-    .update(updatePayload as any)
+    .from("calls" as any)
+    .update(updatePayload)
     .eq("id", callId);
 
   if (error) {
