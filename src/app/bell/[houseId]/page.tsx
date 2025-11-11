@@ -5,14 +5,16 @@ import { listHouseCalls } from "@/lib/repository/calls";
 import { getHouseById } from "@/lib/repository/houses";
 import { listMessagesByCall } from "@/lib/repository/messages";
 
-type Props = {
-  params: {
+type PageProps = {
+  params: Promise<{
     houseId: string;
-  };
+  }>;
 };
 
-export default async function BellHousePage({ params }: Props) {
-  const house = await getHouseById(params.houseId);
+export default async function BellHousePage({ params }: PageProps) {
+  const { houseId } = await params;
+
+  const house = await getHouseById(houseId);
   if (!house) {
     notFound();
   }
