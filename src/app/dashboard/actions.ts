@@ -59,13 +59,15 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
 
   const { error } = await supabaseAdminClient
     .from("calls")
-    .update({
-      status,
-      ended_at:
-        status === "missed" || status === "answered"
-          ? new Date().toISOString()
-          : null
-    })
+    .update(
+      {
+        status,
+        ended_at:
+          status === "missed" || status === "answered"
+            ? new Date().toISOString()
+            : null
+      } as Database["public"]["Tables"]["calls"]["Update"]
+    )
     .eq("id", callId);
 
   if (error) {
