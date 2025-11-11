@@ -185,48 +185,4 @@ export function useVideoCall(callId: string | null, role: "visitor" | "resident"
     hangup
   };
 }
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { createPeerConnection } from "@/lib/webrtc";
-
-export function useVideoCall() {
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-
-  const peerConnection = useMemo(
-    () =>
-      createPeerConnection({
-        onTrack: (event) => {
-          setRemoteStream(event.streams[0]);
-        }
-      }),
-    []
-  );
-
-  useEffect(() => {
-    return () => {
-      peerConnection.close();
-      localStream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [peerConnection, localStream]);
-
-  const startLocalMedia = async () => {
-    if (!navigator.mediaDevices) return;
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true
-    });
-    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
-    setLocalStream(stream);
-    return stream;
-  };
-
-  return {
-    peerConnection,
-    localStream,
-    remoteStream,
-    startLocalMedia
-  };
-}
 
