@@ -10,7 +10,23 @@ import {
 
 type ConnectionState = "idle" | "calling" | "ringing" | "connected";
 
-export function useAudioCall(callId: string | null, role: "visitor" | "resident") {
+type CandidatePayload = Extract<
+  Omit<SignalingMessage, "from">,
+  { type: "candidate" }
+>;
+type OfferPayload = Extract<
+  Omit<SignalingMessage, "from">,
+  { type: "offer" | "answer" }
+>;
+type HangupPayload = Extract<
+  Omit<SignalingMessage, "from">,
+  { type: "hangup" }
+>;
+
+export function useAudioCall(
+  callId: string | null,
+  role: "visitor" | "resident"
+) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
@@ -43,12 +59,11 @@ export function useAudioCall(callId: string | null, role: "visitor" | "resident"
     const pc = createPeerConnection({
       onIceCandidate: (candidate) => {
         if (candidate) {
-          sendSignalRef.current?.(
-            {
-              type: "candidate",
-              candidate: candidate.toJSON()
-            } as Extract<Omit<SignalingMessage, "from">, { type: "candidate" }>
-          );
+          const payload: CandidatePayload = {
+            type: "candidate",
+            candidate: candidate.toJSON()
+          };
+          sendSignalRef.current?.(payload);
         }
       },
       onTrack: (event) => {
@@ -144,7 +159,8 @@ export function useAudioCall(callId: string | null, role: "visitor" | "resident"
       const pc = ensurePeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await sendSignal({ type: "offer", sdp: offer });
+      const payload: OfferPayload = { type: "offer", sdp: offer };
+      await sendSignal(payload);
     },
     [callId, ensurePeerConnection, sendSignal, startLocalAudio]
   );
@@ -156,14 +172,16 @@ export function useAudioCall(callId: string | null, role: "visitor" | "resident"
     await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await sendSignal({ type: "answer", sdp: answer });
+    const payload: OfferPayload = { type: "answer", sdp: answer };
+    await sendSignal(payload);
     await flushCandidates();
     setPendingOffer(null);
     setConnectionState("connected");
   }, [ensurePeerConnection, flushCandidates, pendingOffer, sendSignal, startLocalAudio]);
 
   const hangup = useCallback(async () => {
-    await sendSignal({ type: "hangup" });
+    const payload: HangupPayload = { type: "hangup" };
+    await sendSignal(payload);
     cleanup();
   }, [cleanup, sendSignal]);
 
