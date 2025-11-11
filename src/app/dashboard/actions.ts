@@ -11,8 +11,8 @@ import type { Database } from "@/types/database";
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-function createActionSupabaseClient() {
-  const cookieStore = cookies();
+async function createActionSupabaseClient() {
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -30,7 +30,7 @@ function createActionSupabaseClient() {
 }
 
 export async function requestMagicLink(email: string) {
-  const supabase = createActionSupabaseClient();
+  const supabase = await createActionSupabaseClient();
   const redirectTo =
     env.NEXT_PUBLIC_APP_URL?.concat("/dashboard") ?? "http://localhost:3000/dashboard";
 
@@ -48,7 +48,7 @@ export async function requestMagicLink(email: string) {
 }
 
 export async function signOut() {
-  const supabase = createActionSupabaseClient();
+  const supabase = await createActionSupabaseClient();
   await supabase.auth.signOut();
 }
 
@@ -75,7 +75,7 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
 }
 
 export async function saveFcmToken(token: string) {
-  const supabase = createActionSupabaseClient();
+  const supabase = await createActionSupabaseClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
