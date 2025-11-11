@@ -1,5 +1,6 @@
 import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { Message } from "@/types";
+import type { Database } from "@/types/database";
 
 export async function listMessagesByCall(callId: string): Promise<Message[]> {
   if (!supabaseAdminClient) {
@@ -31,21 +32,37 @@ export async function createMessage(input: {
     throw new Error("Supabase admin client not configured.");
   }
 
-  const { data, error } = await supabaseAdminClient
+  const adminMessages = supabaseAdminClient as unknown as {
+    from: (table: "messages") => {
+      insert: (
+        values: Database["public"]["Tables"]["messages"]["Insert"][],
+        options: { defaultToNull: boolean }
+      ) => Promise<{ data: Message | null; error: Error | null }>;
+    };
+  };
+
+  const { data, error } = await adminMessages
     .from("messages")
-    .insert({
-      call_id: input.callId,
-      sender: input.sender ?? null,
-      content: input.content ?? null,
-      audio_url: input.audioUrl ?? null,
-      video_url: input.videoUrl ?? null
-    })
-    .select("*")
-    .single();
+    .insert(
+      [
+        {
+          call_id: input.callId,
+          sender: input.sender ?? null,
+          content: input.content ?? null,
+          audio_url: input.audioUrl ?? null,
+          video_url: input.videoUrl ?? null
+        }
+      ],
+      { defaultToNull: false }
+    );
 
   if (error) {
     console.error("[SmartBell] failed to create message", error);
     throw new Error("Não foi possível enviar a mensagem.");
+  }
+
+  if (!data) {
+    throw new Error("Resposta inválida ao criar mensagem.");
   }
 
   return data;
