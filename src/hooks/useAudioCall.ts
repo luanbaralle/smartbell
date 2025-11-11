@@ -43,11 +43,12 @@ export function useAudioCall(callId: string | null, role: "visitor" | "resident"
     const pc = createPeerConnection({
       onIceCandidate: (candidate) => {
         if (candidate) {
-          const payload: Omit<SignalingMessage, "from"> = {
-            type: "candidate",
-            candidate: candidate.toJSON()
-          };
-          sendSignalRef.current?.(payload);
+          sendSignalRef.current?.(
+            {
+              type: "candidate",
+              candidate: candidate.toJSON()
+            } as Extract<Omit<SignalingMessage, "from">, { type: "candidate" }>
+          );
         }
       },
       onTrack: (event) => {
