@@ -1,26 +1,17 @@
-import { cookies } from "next/headers";
-
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { UserProfile } from "@/types";
 
-export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError
-  } = await supabase.auth.getUser();
-
-  if (authError) {
-    console.error("[SmartBell] auth error", authError);
-    return null;
+export async function getUserProfileById(
+  userId: string
+): Promise<UserProfile | null> {
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
   }
 
-  if (!user) return null;
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdminClient
     .from("users")
     .select("*")
-    .eq("id", user.id)
+    .eq("id", userId)
     .maybeSingle();
 
   if (error) {
@@ -28,56 +19,21 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     throw new Error("Falha ao carregar perfil do usuário.");
   }
 
-  if (data) {
-    return data;
-  }
-
-  const { data: created, error: createError } = await supabase
-    .from("users")
-    .upsert(
-      {
-        id: user.id,
-        email: user.email ?? "",
-        role: "morador"
-      },
-      { onConflict: "id" }
-    )
-    .select("*")
-    .single();
-
-  if (createError) {
-    console.error("[SmartBell] failed to create user profile", createError);
-    throw new Error("Erro ao provisionar perfil do usuário.");
-  }
-
-  return created;
+  return data;
 }
 
-export async function saveFcmToken(token: string) {
-  const supabase = createSupabaseServerClient();
-  const cookieStore = cookies();
-  const sessionToken = cookieStore.get("sb-access-token");
-
-  if (!sessionToken) {
-    throw new Error("Usuário não autenticado.");
+export async function upsertUserProfile(profile: UserProfile) {
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
   }
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error("Usuário não autenticado.");
-  }
-
-  const { error } = await supabase
+  const { error } = await supabaseAdminClient
     .from("users")
-    .upsert({ id: user.id, email: user.email, fcm_token: token })
-    .eq("id", user.id);
+    .upsert(profile, { onConflict: "id" });
 
   if (error) {
-    console.error("[SmartBell] failed to save FCM token", error);
-    throw new Error("Erro ao salvar token de notificações.");
+    console.error("[SmartBell] failed to upsert user profile", error);
+    throw new Error("Erro ao atualizar perfil do usuário.");
   }
 }
 

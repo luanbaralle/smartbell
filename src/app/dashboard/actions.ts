@@ -1,11 +1,36 @@
 "use server";
 
-import { createSupabaseRouteClient } from "@/lib/supabase";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+
 import { env } from "@/lib/env";
+import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { CallStatus } from "@/types";
+import type { Database } from "@/types/database";
+
+const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+
+function createActionSupabaseClient() {
+  const cookieStore = cookies();
+
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options?: any) {
+        cookieStore.set(name, value, options);
+      },
+      remove(name: string, options?: any) {
+        cookieStore.delete(name, options);
+      }
+    }
+  });
+}
 
 export async function requestMagicLink(email: string) {
-  const supabase = createSupabaseRouteClient();
+  const supabase = createActionSupabaseClient();
   const redirectTo =
     env.NEXT_PUBLIC_APP_URL?.concat("/dashboard") ?? "http://localhost:3000/dashboard";
 
@@ -23,13 +48,16 @@ export async function requestMagicLink(email: string) {
 }
 
 export async function signOut() {
-  const supabase = createSupabaseRouteClient();
+  const supabase = createActionSupabaseClient();
   await supabase.auth.signOut();
 }
 
 export async function updateCallStatus(callId: string, status: CallStatus) {
-  const supabase = createSupabaseRouteClient();
-  const { error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { error } = await supabaseAdminClient
     .from("calls")
     .update({
       status,
@@ -47,7 +75,7 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
 }
 
 export async function saveFcmToken(token: string) {
-  const supabase = createSupabaseRouteClient();
+  const supabase = createActionSupabaseClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
@@ -56,12 +84,17 @@ export async function saveFcmToken(token: string) {
     throw new Error("Usuário não autenticado.");
   }
 
-  const { error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { error } = await supabaseAdminClient
     .from("users")
     .upsert({
       id: user.id,
       email: user.email ?? "",
-      fcm_token: token
+      fcm_token: token,
+      role: "morador"
     })
     .eq("id", user.id);
 
@@ -70,4 +103,3 @@ export async function saveFcmToken(token: string) {
     throw new Error("Não foi possível salvar token de notificações.");
   }
 }
-

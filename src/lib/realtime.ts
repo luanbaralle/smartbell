@@ -1,7 +1,6 @@
-import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { supabase } from "@/lib/supabaseClient";
 
 export const createRealtimeChannel = (channel: string) => {
-  const supabase = createSupabaseBrowserClient();
   const realtimeChannel = supabase.channel(channel, {
     config: {
       broadcast: { ack: true },

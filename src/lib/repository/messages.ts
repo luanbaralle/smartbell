@@ -1,9 +1,12 @@
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { Message } from "@/types";
 
 export async function listMessagesByCall(callId: string): Promise<Message[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("messages")
     .select("*")
     .eq("call_id", callId)
@@ -24,8 +27,11 @@ export async function createMessage(input: {
   audioUrl?: string;
   videoUrl?: string;
 }): Promise<Message> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("messages")
     .insert({
       call_id: input.callId,

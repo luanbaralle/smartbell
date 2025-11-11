@@ -1,9 +1,12 @@
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { House } from "@/types";
 
 export async function getHouseById(houseId: string): Promise<House | null> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("houses")
     .select("*")
     .eq("id", houseId)
@@ -18,8 +21,11 @@ export async function getHouseById(houseId: string): Promise<House | null> {
 }
 
 export async function listHousesByOwner(ownerId: string): Promise<House[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("houses")
     .select("*")
     .eq("owner_id", ownerId)

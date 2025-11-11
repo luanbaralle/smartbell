@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { Call, CallStatus, CallType } from "@/types";
 
 export async function createCall(input: {
@@ -7,8 +7,11 @@ export async function createCall(input: {
   sessionId?: string;
   visitorName?: string;
 }): Promise<Call> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("calls")
     .insert({
       house_id: input.houseId,
@@ -28,8 +31,11 @@ export async function createCall(input: {
 }
 
 export async function updateCallStatus(callId: string, status: CallStatus) {
-  const supabase = createSupabaseServerClient();
-  const { error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { error } = await supabaseAdminClient
     .from("calls")
     .update({ status })
     .eq("id", callId);
@@ -41,8 +47,11 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
 }
 
 export async function listHouseCalls(houseId: string): Promise<Call[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
     .from("calls")
     .select("*")
     .eq("house_id", houseId)
