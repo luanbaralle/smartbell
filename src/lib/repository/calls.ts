@@ -40,7 +40,20 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     throw new Error("Supabase admin client not configured.");
   }
 
-  const { error } = await supabaseAdminClient
+  const adminCalls = supabaseAdminClient as unknown as {
+    from: (table: "calls") => {
+      update: (
+        values: Database["public"]["Tables"]["calls"]["Update"]
+      ) => {
+        eq: (
+          column: "id",
+          value: string
+        ) => Promise<{ error: Error | null }>;
+      };
+    };
+  };
+
+  const { error } = await adminCalls
     .from("calls")
     .update({ status })
     .eq("id", callId);
