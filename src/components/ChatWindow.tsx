@@ -11,7 +11,7 @@ type ChatWindowProps = {
   onSendMessage: (content: string) => Promise<void>;
   isSending?: boolean;
   disabled?: boolean;
-  textareaRef?: RefObject<HTMLTextAreaElement>;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 };
 
 export function ChatWindow({
