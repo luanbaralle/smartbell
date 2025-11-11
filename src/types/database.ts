@@ -97,7 +97,7 @@ export interface Database {
         Row: {
           id: string;
           call_id: string;
-          sender: string;
+          sender: string | null;
           content: string | null;
           audio_url: string | null;
           video_url: string | null;
@@ -106,7 +106,7 @@ export interface Database {
         Insert: {
           id?: string;
           call_id: string;
-          sender: string;
+          sender?: string | null;
           content?: string | null;
           audio_url?: string | null;
           video_url?: string | null;
@@ -115,7 +115,7 @@ export interface Database {
         Update: {
           id?: string;
           call_id?: string;
-          sender?: string;
+          sender?: string | null;
           content?: string | null;
           audio_url?: string | null;
           video_url?: string | null;
