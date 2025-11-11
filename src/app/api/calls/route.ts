@@ -25,18 +25,19 @@ export async function POST(request: Request) {
 
   const { houseId, type, sessionId, visitorName } = parseResult.data;
 
+  const payload: Database["public"]["Tables"]["calls"]["Insert"][] = [
+    {
+      house_id: houseId,
+      type,
+      status: "pending",
+      session_id: sessionId ?? null,
+      visitor_name: visitorName ?? null
+    }
+  ];
+
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert(
-      {
-        house_id: houseId,
-        type,
-        status: "pending",
-        session_id: sessionId ?? null,
-        visitor_name: visitorName ?? null
-      } as Database["public"]["Tables"]["calls"]["Insert"],
-      { defaultToNull: false }
-    )
+    .insert(payload, { defaultToNull: false })
     .select("*")
     .single();
 
