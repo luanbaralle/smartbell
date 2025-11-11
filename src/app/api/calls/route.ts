@@ -24,18 +24,17 @@ export async function POST(request: Request) {
 
   const { houseId, type, sessionId, visitorName } = parseResult.data;
 
+  const payload = {
+    house_id: houseId,
+    type,
+    status: "pending" as const,
+    session_id: sessionId ?? null,
+    visitor_name: visitorName ?? null
+  };
+
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert(
-      {
-        house_id: houseId,
-        type,
-        status: "pending",
-        session_id: sessionId ?? null,
-        visitor_name: visitorName ?? null
-      },
-      { defaultToNull: false }
-    )
+    .insert([payload], { defaultToNull: false })
     .select("*")
     .single();
 
