@@ -1,5 +1,6 @@
 import { supabaseAdminClient } from "@/lib/supabaseAdmin";
 import type { Call, CallStatus, CallType } from "@/types";
+import type { Database } from "@/types/database";
 
 export async function createCall(input: {
   houseId: string;
@@ -11,16 +12,19 @@ export async function createCall(input: {
     throw new Error("Supabase admin client not configured.");
   }
 
-  const payload = {
-    house_id: input.houseId,
-    type: input.type,
-    session_id: input.sessionId ?? null,
-    visitor_name: input.visitorName ?? null
-  };
-
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert([payload], { defaultToNull: false })
+    .insert(
+      [
+        {
+          house_id: input.houseId,
+          type: input.type,
+          session_id: input.sessionId ?? null,
+          visitor_name: input.visitorName ?? null
+        } as Database["public"]["Tables"]["calls"]["Insert"]
+      ],
+      { defaultToNull: false }
+    )
     .select("*")
     .single();
 

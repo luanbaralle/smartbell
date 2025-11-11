@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sendPushNotification } from "@/lib/fcm";
 import { createCallSchema } from "@/lib/schemas";
 import { supabaseAdminClient } from "@/lib/supabaseAdmin";
+import type { Database } from "@/types/database";
 
 export async function POST(request: Request) {
   if (!supabaseAdminClient) {
@@ -24,17 +25,18 @@ export async function POST(request: Request) {
 
   const { houseId, type, sessionId, visitorName } = parseResult.data;
 
-  const payload = {
-    house_id: houseId,
-    type,
-    status: "pending" as const,
-    session_id: sessionId ?? null,
-    visitor_name: visitorName ?? null
-  };
-
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert([payload], { defaultToNull: false })
+    .insert(
+      {
+        house_id: houseId,
+        type,
+        status: "pending",
+        session_id: sessionId ?? null,
+        visitor_name: visitorName ?? null
+      } as Database["public"]["Tables"]["calls"]["Insert"],
+      { defaultToNull: false }
+    )
     .select("*")
     .single();
 
