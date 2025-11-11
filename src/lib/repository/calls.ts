@@ -13,12 +13,15 @@ export async function createCall(input: {
 
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert({
-      house_id: input.houseId,
-      type: input.type,
-      session_id: input.sessionId ?? null,
-      visitor_name: input.visitorName ?? null
-    })
+    .insert(
+      {
+        house_id: input.houseId,
+        type: input.type,
+        session_id: input.sessionId ?? null,
+        visitor_name: input.visitorName ?? null
+      },
+      { defaultToNull: false }
+    )
     .select("*")
     .single();
 

@@ -26,13 +26,16 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert({
-      house_id: houseId,
-      type,
-      status: "pending",
-      session_id: sessionId ?? null,
-      visitor_name: visitorName ?? null
-    })
+    .insert(
+      {
+        house_id: houseId,
+        type,
+        status: "pending",
+        session_id: sessionId ?? null,
+        visitor_name: visitorName ?? null
+      },
+      { defaultToNull: false }
+    )
     .select("*")
     .single();
 
