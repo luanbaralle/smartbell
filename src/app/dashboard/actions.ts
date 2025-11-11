@@ -98,20 +98,26 @@ export async function saveFcmToken(token: string) {
     throw new Error("Supabase admin client not configured.");
   }
 
-  const { error } = await supabaseAdminClient
-    .from("users")
-    .upsert(
-      [
-        {
-          id: user.id,
-          email: user.email ?? "",
-          fcm_token: token,
-          role: "morador"
-        } satisfies Database["public"]["Tables"]["users"]["Insert"]
-      ],
-      { onConflict: "id" }
-    )
-    .eq("id", user.id);
+  const adminUsers = supabaseAdminClient as unknown as {
+    from: (table: "users") => {
+      upsert: (
+        values: Database["public"]["Tables"]["users"]["Insert"][],
+        options: { onConflict: "id" }
+      ) => Promise<{ error: Error | null }>;
+    };
+  };
+
+  const { error } = await adminUsers.from("users").upsert(
+    [
+      {
+        id: user.id,
+        email: user.email ?? "",
+        fcm_token: token,
+        role: "morador"
+      }
+    ],
+    { onConflict: "id" }
+  );
 
   if (error) {
     console.error("[SmartBell] save FCM token error", error);
