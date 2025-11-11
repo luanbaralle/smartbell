@@ -14,8 +14,8 @@ import type { Database } from "@/types/database";
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-function createDashboardSupabase() {
-  const cookieStore = cookies();
+async function createDashboardSupabase() {
+  const cookieStore = await cookies();
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get(name: string) {
@@ -25,14 +25,14 @@ function createDashboardSupabase() {
         cookieStore.set(name, value, options);
       },
       remove(name: string, options?: any) {
-        cookieStore.delete(name, options);
+        cookieStore.delete(name);
       }
     }
   });
 }
 
 export default async function DashboardPage() {
-  const supabase = createDashboardSupabase();
+  const supabase = await createDashboardSupabase();
   const {
     data: { user }
   } = await supabase.auth.getUser();
