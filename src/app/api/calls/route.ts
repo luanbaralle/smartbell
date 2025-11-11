@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert(payload, { defaultToNull: false })
+    .insert(payload as any, { defaultToNull: false })
     .select("*")
     .single();
 

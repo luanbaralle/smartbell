@@ -23,7 +23,7 @@ export async function createCall(input: {
 
   const { data, error } = await supabaseAdminClient
     .from("calls")
-    .insert(payload, { defaultToNull: false })
+    .insert(payload as any, { defaultToNull: false })
     .select("*")
     .single();
 
