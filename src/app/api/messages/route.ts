@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createMessageSchema } from "@/lib/schemas";
 import { supabaseAdminClient } from "@/lib/supabaseAdmin";
+import type { Database } from "@/types/database";
 
 export async function GET(request: NextRequest) {
   if (!supabaseAdminClient) {
@@ -56,16 +57,20 @@ export async function POST(request: Request) {
 
   const { callId, sender, content, audioUrl, videoUrl } = parseResult.data;
 
-  const { data, error } = await supabaseAdminClient
-    .from("messages")
-    .insert({
+  const payload: Database["public"]["Tables"]["messages"]["Insert"][] = [
+    {
       call_id: callId,
       sender: sender ?? null,
       content: content ?? null,
       audio_url: audioUrl ?? null,
       video_url: videoUrl ?? null
-    })
-    .select("*")
+    }
+  ];
+
+  const { data, error } = await supabaseAdminClient
+    .from("messages")
+    .insert(payload as any, { defaultToNull: false })
+    .select("id, call_id, sender, content, audio_url, video_url, created_at")
     .single();
 
   if (error) {
