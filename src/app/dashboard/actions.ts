@@ -65,8 +65,16 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
         : null
   };
 
-  const { error } = await supabaseAdminClient
-    .from("calls" as any)
+  const admin = supabaseAdminClient as unknown as {
+    from: (table: string) => {
+      update: (values: Database["public"]["Tables"]["calls"]["Update"]) => {
+        eq: (column: string, value: string) => Promise<{ error: Error | null }>;
+      };
+    };
+  };
+
+  const { error } = await admin
+    .from("calls")
     .update(updatePayload)
     .eq("id", callId);
 
