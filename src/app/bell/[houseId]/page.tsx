@@ -20,7 +20,7 @@ export default async function BellHousePage({ params }: PageProps) {
   }
 
   const calls = await listHouseCalls(house.id);
-  const initialCall = calls.at(0) ?? null;
+  const initialCall = calls.length > 0 ? calls[0] : null;
   const initialMessages = initialCall
     ? await listMessagesByCall(initialCall.id)
     : [];
