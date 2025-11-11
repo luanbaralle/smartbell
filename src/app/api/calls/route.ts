@@ -49,6 +49,15 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!data) {
+    return NextResponse.json(
+      { message: "Erro ao criar chamada." },
+      { status: 500 }
+    );
+  }
+
+  const createdCall = data as Database["public"]["Tables"]["calls"]["Row"];
+
   const { data: houseRow } = await supabaseAdminClient
     .from("houses")
     .select("owner_id, name")
@@ -75,7 +84,7 @@ export async function POST(request: Request) {
           title: "Visita no Smart Bell",
           body: `Alguém está chamando ${houseRow.name ?? "sua residência"}.`,
           data: {
-            callId: data.id,
+            callId: createdCall.id,
             houseId
           }
         });
@@ -85,6 +94,6 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ call: data });
+  return NextResponse.json({ call: createdCall });
 }
 
