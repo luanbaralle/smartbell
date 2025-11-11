@@ -100,12 +100,17 @@ export async function saveFcmToken(token: string) {
 
   const { error } = await supabaseAdminClient
     .from("users")
-    .upsert({
-      id: user.id,
-      email: user.email ?? "",
-      fcm_token: token,
-      role: "morador"
-    })
+    .upsert(
+      [
+        {
+          id: user.id,
+          email: user.email ?? "",
+          fcm_token: token,
+          role: "morador"
+        } satisfies Database["public"]["Tables"]["users"]["Insert"]
+      ],
+      { onConflict: "id" }
+    )
     .eq("id", user.id);
 
   if (error) {
