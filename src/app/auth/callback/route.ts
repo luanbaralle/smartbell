@@ -31,30 +31,32 @@ export async function GET(request: NextRequest) {
       supabaseAnonKey,
       {
         cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options?: any) {
-          try {
-            if (options) {
-              cookieStore.set(name, value, options);
-            } else {
-              cookieStore.set(name, value);
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options?: any) {
+            try {
+              cookieStore.set({
+                name,
+                value,
+                ...(options || {}),
+                sameSite: "lax" as const,
+                path: "/"
+              });
+            } catch (err) {
+              console.warn("[SmartBell] cookie set warning", err);
             }
-          } catch (err) {
-            // Ignorar erros de cookie em rotas de callback
-            console.warn("[SmartBell] cookie set warning", err);
-          }
-        },
-        remove(name: string, options?: any) {
-          try {
-            cookieStore.delete(name);
-          } catch (err) {
-            console.warn("[SmartBell] cookie remove warning", err);
+          },
+          remove(name: string) {
+            try {
+              cookieStore.delete(name);
+            } catch (err) {
+              console.warn("[SmartBell] cookie remove warning", err);
+            }
           }
         }
       }
-    });
+    );
 
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
@@ -63,11 +65,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/dashboard?error=auth_failed", request.url));
     }
 
-    if (data?.session) {
-      // Sucesso - redirecionar para dashboard
-      const redirectUrl = new URL("/dashboard", request.url);
-      return NextResponse.redirect(redirectUrl);
+    if (!data?.session) {
+      console.error("[SmartBell] auth callback: no session after exchange");
+      return NextResponse.redirect(new URL("/dashboard?error=no_session", request.url));
     }
+
+    // Verificar se o usuário foi autenticado corretamente
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error("[SmartBell] auth callback: user not found after session exchange");
+      return NextResponse.redirect(new URL("/dashboard?error=no_user", request.url));
+    }
+
+    console.log("[SmartBell] auth callback: success, user:", user.email);
+
+    // Sucesso - redirecionar para dashboard
+    const redirectUrl = new URL("/dashboard", request.url);
+    return NextResponse.redirect(redirectUrl);
 
     // Se não houver sessão, redirecionar para login
     return NextResponse.redirect(new URL("/dashboard", request.url));
