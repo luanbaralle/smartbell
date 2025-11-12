@@ -35,16 +35,24 @@ export default async function DashboardPage() {
   const supabase = await createDashboardSupabase();
   
   const {
-    data: { user }
+    data: { user },
+    error: userError
   } = await supabase.auth.getUser();
 
+  if (userError) {
+    console.error("[SmartBell] dashboard getUser error", userError);
+  }
+
   if (!user) {
+    console.log("[SmartBell] dashboard: no user, showing sign in");
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-8">
         <SignInCard />
       </main>
     );
   }
+
+  console.log("[SmartBell] dashboard: user authenticated", user.email);
 
   let profile = await getUserProfileById(user.id);
 
