@@ -22,10 +22,24 @@ async function createDashboardSupabase() {
         return cookieStore.get(name)?.value;
       },
       set(name: string, value: string, options?: any) {
-        cookieStore.set(name, value, options);
+        try {
+          cookieStore.set(name, value, {
+            ...options,
+            sameSite: options?.sameSite || "lax",
+            path: options?.path || "/",
+            httpOnly: options?.httpOnly ?? true,
+            secure: options?.secure ?? true
+          });
+        } catch (err) {
+          console.warn("[SmartBell] cookie set warning", err);
+        }
       },
-      remove(name: string, options?: any) {
-        cookieStore.delete(name);
+      remove(name: string) {
+        try {
+          cookieStore.delete(name);
+        } catch (err) {
+          console.warn("[SmartBell] cookie remove warning", err);
+        }
       }
     }
   });
