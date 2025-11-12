@@ -84,6 +84,8 @@ export function DashboardClient({
   const [isSending, setIsSending] = useState(false);
   const audioSectionRef = useRef<HTMLDivElement | null>(null);
   const [isSigningOut, startSignOut] = useTransition();
+  const [isCreatingHouse, setIsCreatingHouse] = useState(false);
+  const [housesList, setHousesList] = useState<House[]>(houses);
 
   const selectedCall = selectedCallId ? callMap[selectedCallId] : null;
   const selectedMessages = selectedCallId ? messageMap[selectedCallId] ?? [] : [];
@@ -123,7 +125,7 @@ export function DashboardClient({
       `dashboard-calls:${profile.id}`
     );
 
-    houses.forEach((house) => {
+    housesList.forEach((house) => {
       channel.on(
         "postgres_changes",
         {
@@ -160,7 +162,7 @@ export function DashboardClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [houses, houseLookup, profile.id]);
+  }, [housesList, houseLookup, profile.id]);
 
   useEffect(() => {
     if (!selectedCallId) return;
@@ -316,6 +318,31 @@ export function DashboardClient({
       console.error(error);
     }
   }, []);
+
+  const handleCreateHouse = useCallback(async () => {
+    setIsCreatingHouse(true);
+    try {
+      const response = await fetch("/api/houses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Casa de Teste" })
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao criar casa");
+      }
+
+      const { house } = await response.json();
+      setHousesList((prev) => [...prev, house]);
+      // Recarregar página para sincronizar com servidor
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      alert("Não foi possível criar a casa. Tente novamente.");
+    } finally {
+      setIsCreatingHouse(false);
+    }
+  }, []);
   const handleAcceptAudioCall = useCallback(async () => {
     if (!selectedCallId) return;
     try {
@@ -362,7 +389,7 @@ export function DashboardClient({
           </CardHeader>
           <CardContent className="flex flex-wrap gap-6">
             <div>
-              <p className="text-3xl font-semibold">{houses.length}</p>
+              <p className="text-3xl font-semibold">{housesList.length}</p>
               <p className="text-sm text-slate-400">Casas vinculadas</p>
             </div>
             <div>
@@ -410,7 +437,21 @@ export function DashboardClient({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {callOrder.length === 0 && (
+            {housesList.length === 0 && (
+              <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                <p className="text-sm text-slate-300">
+                  Nenhuma casa cadastrada. Crie uma casa de teste para começar.
+                </p>
+                <Button
+                  onClick={handleCreateHouse}
+                  disabled={isCreatingHouse}
+                  className="w-full"
+                >
+                  {isCreatingHouse ? "Criando..." : "Criar Casa de Teste"}
+                </Button>
+              </div>
+            )}
+            {callOrder.length === 0 && housesList.length > 0 && (
               <p className="text-sm text-slate-400">
                 Nenhuma chamada registrada até o momento.
               </p>

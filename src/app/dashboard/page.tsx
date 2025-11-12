@@ -39,7 +39,7 @@ export default async function DashboardPage() {
 
   if (!user) {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center bg-slate-950 p-8">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-8">
         <SignInCard />
       </main>
     );
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
   );
 
   return (
-    <main className="flex flex-1 flex-col gap-6 bg-slate-950 p-6">
+    <main className="flex min-h-screen flex-col gap-6 bg-slate-950 p-6">
       <DashboardClient
         profile={profile}
         houses={houses}

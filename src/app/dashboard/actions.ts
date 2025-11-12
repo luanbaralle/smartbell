@@ -31,8 +31,12 @@ async function createActionSupabaseClient() {
 
 export async function requestMagicLink(email: string) {
   const supabase = await createActionSupabaseClient();
-  const redirectTo =
-    env.NEXT_PUBLIC_APP_URL?.concat("/dashboard") ?? "http://localhost:3000/dashboard";
+  
+  // Usar NEXT_PUBLIC_APP_URL se disponível, senão fallback para produção
+  const baseUrl = env.NEXT_PUBLIC_APP_URL || "https://smartbell-nine.vercel.app";
+  const redirectTo = baseUrl.endsWith("/dashboard")
+    ? baseUrl
+    : `${baseUrl}/dashboard`;
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
