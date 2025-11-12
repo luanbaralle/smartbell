@@ -36,11 +36,7 @@ export async function GET(request: NextRequest) {
           },
           set(name: string, value: string, options?: any) {
             try {
-              if (options && typeof options === "object") {
-                cookieStore.set(name, value, options);
-              } else {
-                cookieStore.set(name, value);
-              }
+              cookieStore.set(name, value, options);
             } catch (err) {
               console.warn("[SmartBell] cookie set warning", err);
             }
