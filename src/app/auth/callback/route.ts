@@ -83,9 +83,6 @@ export async function GET(request: NextRequest) {
     // Sucesso - redirecionar para dashboard
     const redirectUrl = new URL("/dashboard", request.url);
     return NextResponse.redirect(redirectUrl);
-
-    // Se não houver sessão, redirecionar para login
-    return NextResponse.redirect(new URL("/dashboard", request.url));
   } catch (error) {
     console.error("[SmartBell] auth callback exception", error);
     // Em caso de erro, redirecionar para dashboard (que mostrará login se não autenticado)
