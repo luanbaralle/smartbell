@@ -39,9 +39,10 @@ export async function requestMagicLink(email: string) {
     (vercelUrl ? `https://${vercelUrl}` : null) ||
     "https://smartbell-nine.vercel.app";
   
-  const redirectTo = baseUrl.endsWith("/dashboard")
+  // Usar rota de callback dedicada
+  const redirectTo = baseUrl.endsWith("/auth/callback")
     ? baseUrl
-    : `${baseUrl}/dashboard`;
+    : `${baseUrl}/auth/callback`;
 
   console.log("[SmartBell] Magic link redirectTo:", redirectTo);
 
