@@ -47,10 +47,10 @@ async function createDashboardSupabase() {
 export default async function DashboardPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: { error?: string };
 }) {
   const supabase = await createDashboardSupabase();
-  const params = await searchParams;
+  const params = searchParams;
   
   const {
     data: { user },
