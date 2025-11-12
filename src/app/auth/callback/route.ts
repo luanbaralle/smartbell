@@ -25,13 +25,17 @@ export async function GET(request: NextRequest) {
         },
         set(name: string, value: string, options?: any) {
           try {
-            cookieStore.set(name, value, options);
+            if (options) {
+              cookieStore.set(name, value, options);
+            } else {
+              cookieStore.set(name, value);
+            }
           } catch (err) {
             // Ignorar erros de cookie em rotas de callback
             console.warn("[SmartBell] cookie set warning", err);
           }
         },
-        remove(name: string) {
+        remove(name: string, options?: any) {
           try {
             cookieStore.delete(name);
           } catch (err) {
