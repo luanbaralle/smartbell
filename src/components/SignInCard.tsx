@@ -9,9 +9,15 @@ import { Input } from "@/components/ui/input";
 import { requestMagicLink } from "@/app/dashboard/actions";
 import { cn } from "@/lib/utils";
 
-export function SignInCard() {
+type SignInCardProps = {
+  errorMessage?: string | null;
+};
+
+export function SignInCard({ errorMessage }: SignInCardProps = {}) {
   const [email, setEmail] = useState("");
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
+    errorMessage ? { type: "error", message: errorMessage } : null
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (e?: React.FormEvent) => {

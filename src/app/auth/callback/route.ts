@@ -55,7 +55,17 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
-      console.error("[SmartBell] auth callback error", error);
+      console.error("[SmartBell] auth callback error:", {
+        message: error.message,
+        status: error.status,
+        name: error.name
+      });
+      
+      // Se o código já foi usado ou expirou, redirecionar para login
+      if (error.message?.includes("code") || error.message?.includes("expired") || error.message?.includes("invalid")) {
+        return NextResponse.redirect(new URL("/dashboard?error=code_invalid", request.url));
+      }
+      
       return NextResponse.redirect(new URL("/dashboard?error=auth_failed", request.url));
     }
 

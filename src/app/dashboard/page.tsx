@@ -31,8 +31,13 @@ async function createDashboardSupabase() {
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const supabase = await createDashboardSupabase();
+  const params = await searchParams;
   
   const {
     data: { user },
@@ -45,9 +50,15 @@ export default async function DashboardPage() {
 
   if (!user) {
     console.log("[SmartBell] dashboard: no user, showing sign in");
+    const errorMessage = params.error === "code_invalid" 
+      ? "O link de acesso expirou ou já foi usado. Solicite um novo link."
+      : params.error === "auth_failed"
+      ? "Falha na autenticação. Tente novamente."
+      : null;
+    
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-8">
-        <SignInCard />
+        <SignInCard errorMessage={errorMessage} />
       </main>
     );
   }
