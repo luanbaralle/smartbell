@@ -32,11 +32,18 @@ async function createActionSupabaseClient() {
 export async function requestMagicLink(email: string) {
   const supabase = await createActionSupabaseClient();
   
-  // Usar NEXT_PUBLIC_APP_URL se disponível, senão fallback para produção
-  const baseUrl = env.NEXT_PUBLIC_APP_URL || "https://smartbell-nine.vercel.app";
+  // Detectar URL base: usar VERCEL_URL em produção, NEXT_PUBLIC_APP_URL se definido, ou fallback
+  const vercelUrl = process.env.VERCEL_URL;
+  const baseUrl = 
+    env.NEXT_PUBLIC_APP_URL || 
+    (vercelUrl ? `https://${vercelUrl}` : null) ||
+    "https://smartbell-nine.vercel.app";
+  
   const redirectTo = baseUrl.endsWith("/dashboard")
     ? baseUrl
     : `${baseUrl}/dashboard`;
+
+  console.log("[SmartBell] Magic link redirectTo:", redirectTo);
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
