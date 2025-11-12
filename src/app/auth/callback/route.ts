@@ -5,6 +5,14 @@ import { env } from "@/lib/env";
 import type { Database } from "@/types/database";
 
 export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url);
+  const code = requestUrl.searchParams.get("code");
+
+  if (!code) {
+    console.warn("[SmartBell] auth callback: no code provided");
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
   try {
     const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -15,14 +23,6 @@ export async function GET(request: NextRequest) {
         { error: "Server configuration error" },
         { status: 500 }
       );
-    }
-
-    const requestUrl = new URL(request.url);
-    const code = requestUrl.searchParams.get("code");
-
-    if (!code) {
-      console.warn("[SmartBell] auth callback: no code provided");
-      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     const cookieStore = await cookies();
