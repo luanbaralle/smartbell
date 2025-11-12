@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste FCM SmartBell</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 20px;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      h2 {
+        color: #60a5fa;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 0;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+      #status {
+        margin-top: 20px;
+        padding: 12px;
+        background: #1e293b;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 14px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .success {
+        color: #22c55e;
+      }
+      .error {
+        color: #ef4444;
+      }
+      .info {
+        color: #60a5fa;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🔔 Teste FCM SmartBell</h2>
+    <p>Este teste verifica se o Firebase Cloud Messaging está configurado corretamente.</p>
+    
+    <button id="enable">Ativar notificações</button>
+    <button id="check-sw">Verificar Service Worker</button>
+    
+    <div id="status"></div>
+
+    <script type="module">
+      // Import Firebase libs ESM
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+      import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyCsvatTo3fk3-qBNNM_1p79RKLxPR36bd4",
+        authDomain: "smartbell-cdbe1.firebaseapp.com",
+        projectId: "smartbell-cdbe1",
+        storageBucket: "smartbell-cdbe1.firebasestorage.app",
+        messagingSenderId: "282305468523",
+        appId: "1:282305468523:web:f741011c69b6b14a62392e",
+        measurementId: "BF1ySQhgErYi5i7ntwDtRYAMF3c6rCvBjF4iygArr_Z3jvaEivzPN8GYsTRVRHem-9D0WJGOtkHXxXGsLK8YIaQ",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const messaging = getMessaging(app);
+
+      const statusEl = document.getElementById("status");
+
+      function log(message, type = "info") {
+        const timestamp = new Date().toLocaleTimeString();
+        statusEl.innerHTML += `<span class="${type}">[${timestamp}] ${message}</span>\n`;
+        statusEl.scrollTop = statusEl.scrollHeight;
+        console.log(`[SmartBell] ${message}`);
+      }
+
+      // Verificar suporte
+      if (!("serviceWorker" in navigator)) {
+        log("❌ Service Workers não são suportados neste navegador.", "error");
+      } else {
+        log("✅ Service Workers são suportados.", "success");
+      }
+
+      // Botão: Verificar Service Worker
+      document.getElementById("check-sw").onclick = async () => {
+        try {
+          log("🔍 Verificando Service Worker...", "info");
+          
+          const registration = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
+          
+          if (registration) {
+            log(`✅ Service Worker encontrado! Escopo: ${registration.scope}`, "success");
+            log(`   Estado: ${registration.active?.state || "não ativo"}`, "info");
+          } else {
+            log("⚠️ Service Worker não encontrado. Tente registrar primeiro.", "error");
+          }
+        } catch (err) {
+          log(`❌ Erro ao verificar SW: ${err.message}`, "error");
+        }
+      };
+
+      // Botão: Ativar notificações
+      document.getElementById("enable").onclick = async () => {
+        try {
+          log("🔔 Solicitando permissão de notificações...", "info");
+
+          // Verificar suporte
+          if (!(await isSupported())) {
+            log("❌ Firebase Messaging não é suportado neste navegador.", "error");
+            return;
+          }
+
+          const permission = await Notification.requestPermission();
+          
+          if (permission !== "granted") {
+            log(`❌ Permissão negada: ${permission}`, "error");
+            alert("Permissão negada para notificações.");
+            return;
+          }
+
+          log("✅ Permissão concedida!", "success");
+
+          // Registra o service worker do FCM
+          log("📝 Registrando Service Worker...", "info");
+          const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+          log(`✅ Service Worker registrado! Escopo: ${registration.scope}`, "success");
+
+          // Aguarda o service worker estar pronto
+          await navigator.serviceWorker.ready;
+          log("✅ Service Worker pronto!", "success");
+
+          // Obtém o token do FCM
+          // NOTA: Substitua "YOUR_VAPID_KEY" pela sua VAPID key do Firebase Console
+          // Você pode encontrá-la em: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+          const vapidKey = prompt(
+            "Cole sua VAPID Key do Firebase:\n\n" +
+            "Firebase Console → Project Settings → Cloud Messaging → Web Push certificates\n\n" +
+            "Ou deixe vazio para tentar sem VAPID key:"
+          ) || undefined;
+
+          if (!vapidKey) {
+            log("⚠️ Tentando obter token sem VAPID key...", "info");
+          }
+
+          log("🔑 Obtendo token FCM...", "info");
+          const token = await getToken(messaging, {
+            vapidKey: vapidKey,
+            serviceWorkerRegistration: registration,
+          });
+
+          if (token) {
+            log(`✅ Token FCM gerado com sucesso!`, "success");
+            log(`\n📋 Token:\n${token}\n`, "success");
+            log("💡 Copie este token e salve no banco de dados (tabela users.fcm_token)", "info");
+            
+            // Copiar para clipboard se possível
+            if (navigator.clipboard) {
+              await navigator.clipboard.writeText(token);
+              log("📋 Token copiado para a área de transferência!", "success");
+            }
+            
+            alert("Token FCM gerado! Veja o console e a área de status abaixo.");
+          } else {
+            log("❌ Não foi possível obter token FCM.", "error");
+            alert("Não foi possível obter token FCM. Verifique o console.");
+          }
+        } catch (err) {
+          log(`❌ Erro ao obter token FCM: ${err.message}`, "error");
+          log(`   Stack: ${err.stack}`, "error");
+          alert(`Erro ao obter token FCM — veja o console e a área de status.`);
+        }
+      };
+    </script>
+  </body>
+</html>
+
