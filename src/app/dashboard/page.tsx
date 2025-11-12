@@ -31,8 +31,24 @@ async function createDashboardSupabase() {
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams: Promise<{ code?: string }>;
+}) {
   const supabase = await createDashboardSupabase();
+  const params = await searchParams;
+  
+  // Processar código de autenticação do magic link
+  if (params.code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+    if (!error) {
+      // Redirecionar para limpar o código da URL
+      const { redirect } = await import("next/navigation");
+      redirect("/dashboard");
+    }
+  }
+  
   const {
     data: { user }
   } = await supabase.auth.getUser();
