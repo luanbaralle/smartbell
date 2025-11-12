@@ -36,13 +36,12 @@ export async function GET(request: NextRequest) {
           },
           set(name: string, value: string, options?: any) {
             try {
-              cookieStore.set(name, value, {
-                ...options,
-                sameSite: options?.sameSite || "lax",
-                path: options?.path || "/",
-                httpOnly: options?.httpOnly ?? true,
-                secure: options?.secure ?? true
-              });
+              // O Supabase gerencia as opções dos cookies, apenas passamos o que ele pedir
+              if (options) {
+                cookieStore.set(name, value, options);
+              } else {
+                cookieStore.set(name, value);
+              }
             } catch (err) {
               console.warn("[SmartBell] cookie set warning", err);
             }
