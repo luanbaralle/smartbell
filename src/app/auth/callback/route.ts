@@ -4,11 +4,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import type { Database } from "@/types/database";
 
-const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-
 export async function GET(request: NextRequest) {
   try {
+    const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("[SmartBell] auth callback: missing Supabase credentials");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
 
@@ -18,7 +26,10 @@ export async function GET(request: NextRequest) {
     }
 
     const cookieStore = await cookies();
-    const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    const supabase = createServerClient<Database>(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
