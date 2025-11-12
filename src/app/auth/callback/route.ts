@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       supabaseUrl,
       supabaseAnonKey,
       {
-      cookies: {
+        cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
