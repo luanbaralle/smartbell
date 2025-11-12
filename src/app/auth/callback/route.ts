@@ -8,10 +8,15 @@ const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
+  try {
+    const requestUrl = new URL(request.url);
+    const code = requestUrl.searchParams.get("code");
 
-  if (code) {
+    if (!code) {
+      console.warn("[SmartBell] auth callback: no code provided");
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+
     const cookieStore = await cookies();
     const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
       cookies: {
@@ -19,25 +24,50 @@ export async function GET(request: NextRequest) {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options?: any) {
-          cookieStore.set(name, value, options);
+          try {
+            cookieStore.set(name, value, options);
+          } catch (err) {
+            // Ignorar erros de cookie em rotas de callback
+            console.warn("[SmartBell] cookie set warning", err);
+          }
         },
         remove(name: string) {
-          cookieStore.delete(name);
+          try {
+            cookieStore.delete(name);
+          } catch (err) {
+            console.warn("[SmartBell] cookie remove warning", err);
+          }
         }
       }
     });
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
-      // Redirecionar para dashboard após sucesso
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (error) {
+      console.error("[SmartBell] auth callback error", error);
+      return NextResponse.redirect(new URL("/dashboard?error=auth_failed", request.url));
     }
 
-    console.error("[SmartBell] auth callback error", error);
-  }
+    if (data?.session) {
+      // Sucesso - redirecionar para dashboard
+      const redirectUrl = new URL("/dashboard", request.url);
+      return NextResponse.redirect(redirectUrl);
+    }
 
-  // Se houver erro ou não houver código, redirecionar para login
-  return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Se não houver sessão, redirecionar para login
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  } catch (error) {
+    console.error("[SmartBell] auth callback exception", error);
+    // Em caso de erro, redirecionar para dashboard (que mostrará login se não autenticado)
+    try {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    } catch (redirectError) {
+      // Fallback: retornar resposta simples
+      return NextResponse.json(
+        { error: "Authentication error", message: "Please try logging in again." },
+        { status: 500 }
+      );
+    }
+  }
 }
 
