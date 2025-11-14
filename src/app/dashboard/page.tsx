@@ -4,11 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { DashboardClient } from "@/app/dashboard/DashboardClient";
 import { SignInCard } from "@/components/SignInCard";
 import { env } from "@/lib/env";
-import { listHouseCalls } from "@/lib/repository/calls";
-import { listHousesByOwner } from "@/lib/repository/houses";
-import { listMessagesByCall } from "@/lib/repository/messages";
-import { getUserProfileById, upsertUserProfile } from "@/lib/repository/users";
-import type { Message } from "@/types";
+import type { Call, House, Message, UserProfile } from "@/types";
 import type { Database } from "@/types/database";
 
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -78,30 +74,99 @@ export default async function DashboardPage({
 
   console.log("[SmartBell] dashboard: user authenticated", user.email);
 
-  let profile = await getUserProfileById(user.id);
+  const {
+    data: profileRow,
+    error: profileError
+  } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  if (!profile) {
-    profile = {
-      id: user.id,
-      email: user.email ?? "",
-      fcm_token: null,
-      role: "morador"
-    };
-
-    await upsertUserProfile(profile);
+  if (profileError) {
+    console.error("[SmartBell] dashboard profile fetch error", profileError);
   }
 
-  const houses = await listHousesByOwner(profile.id);
+  let profile = profileRow as UserProfile | null;
+
+  if (!profile) {
+    const {
+      data: insertedProfile,
+      error: insertProfileError
+    } = await supabase
+      .from("users")
+      .upsert({
+        id: user.id,
+        email: user.email ?? "",
+        fcm_token: null,
+        role: "morador"
+      })
+      .select()
+      .single();
+
+    if (insertProfileError || !insertedProfile) {
+      console.error("[SmartBell] dashboard profile upsert error", insertProfileError);
+      throw new Error("Não foi possível carregar o perfil do usuário.");
+    }
+
+    profile = insertedProfile as UserProfile;
+  }
+
+  const {
+    data: housesData,
+    error: housesError
+  } = await supabase
+    .from("houses")
+    .select("*")
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (housesError) {
+    console.error("[SmartBell] dashboard houses fetch error", housesError);
+  }
+
+  const houses = (housesData ?? []) as House[];
 
   const callsWithMessages = await Promise.all(
     houses.map(async (house) => {
-      const houseCalls = await listHouseCalls(house.id);
-      const recentCalls = houseCalls.slice(0, 10);
+      const {
+        data: houseCallsData,
+        error: houseCallsError
+      } = await supabase
+        .from("calls")
+        .select("*")
+        .eq("house_id", house.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (houseCallsError) {
+        console.error("[SmartBell] dashboard calls fetch error", houseCallsError);
+        return {
+          house,
+          calls: [] as (Call & { house: House })[],
+          messages: {} as Record<string, Message[]>
+        };
+      }
+
+      const recentCalls = ((houseCallsData ?? []) as Call[]).slice(0, 10);
 
       const messageEntries = await Promise.all(
         recentCalls.map(async (call) => {
-          const callMessages = await listMessagesByCall(call.id);
-          return [call.id, callMessages as Message[]] as const;
+          const {
+            data: callMessagesData,
+            error: callMessagesError
+          } = await supabase
+            .from("messages")
+            .select("*")
+            .eq("call_id", call.id)
+            .order("created_at", { ascending: true });
+
+          if (callMessagesError) {
+            console.error("[SmartBell] dashboard messages fetch error", callMessagesError);
+            return [call.id, [] as Message[]] as const;
+          }
+
+          return [call.id, (callMessagesData ?? []) as Message[]] as const;
         })
       );
 
