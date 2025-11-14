@@ -2,13 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle
@@ -30,19 +29,16 @@ type Feedback =
     }
   | null;
 
-const tabs: { id: AuthMode; label: string; description: string; icon: typeof LogIn }[] = [
-  {
-    id: "login",
-    label: "Entrar",
-    description: "Já sou morador",
-    icon: LogIn
-  },
-  {
-    id: "register",
-    label: "Criar conta",
-    description: "Primeiro acesso",
-    icon: UserPlus
-  }
+const tabs: { id: AuthMode; label: string }[] = [
+  { id: "login", label: "Login" },
+  { id: "register", label: "Sign Up" }
+];
+
+const socialProviders = [
+  { id: "google", label: "Continue with Google", icon: "G" },
+  { id: "apple", label: "Continue with Apple", icon: "" },
+  { id: "binance", label: "Continue with Binance", icon: "◇" },
+  { id: "wallet", label: "Continue with Wallet", icon: "↗" }
 ];
 
 export function SignInCard({ errorMessage }: SignInCardProps = {}) {
@@ -136,18 +132,10 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
   };
 
   return (
-    <Card className="w-full max-w-md border border-white/10 bg-[#11182b]/80 backdrop-blur-xl text-white shadow-[0_40px_140px_-70px_rgba(0,0,0,1)]">
-      <CardHeader className="space-y-5 pb-2">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Painel do morador</p>
-          <CardTitle className="text-2xl font-semibold text-white">Acesse o Smart Bell OS</CardTitle>
-          <CardDescription className="text-sm text-slate-400">
-            Autenticação segura com Supabase. Centralize chamadas e notificações em um só lugar.
-          </CardDescription>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-          {tabs.map(({ id, label, description, icon: Icon }) => (
+    <Card className="mx-auto w-full max-w-xl rounded-[28px] border border-[#e3e6ed] bg-white shadow-[0px_40px_80px_rgba(15,23,42,0.08)]">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-center rounded-full bg-slate-100 p-1 text-sm font-semibold text-slate-500">
+          {tabs.map(({ id, label }) => (
             <button
               key={id}
               type="button"
@@ -156,51 +144,57 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 setFeedback(null);
               }}
               className={cn(
-                "group flex flex-col rounded-xl px-4 py-3 text-left transition-all",
+                "flex-1 rounded-full px-4 py-1 text-sm transition",
                 mode === id
-                  ? "bg-white text-slate-900 shadow-lg shadow-primary/20"
-                  : "text-slate-200 hover:bg-white/10"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               )}
             >
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Icon className={cn("h-4 w-4", mode === id ? "text-primary" : "text-slate-400")} />
-                <span className={mode === id ? "text-slate-900" : ""}>{label}</span>
-              </div>
-              <span
-                className={cn("text-xs text-slate-400", mode === id && "text-slate-500")}
-              >
-                {description}
-              </span>
+              {label}
             </button>
           ))}
         </div>
+        <CardTitle className="text-center text-lg font-semibold text-slate-800">
+          {mode === "login" ? "Welcome back" : "Create your account"}
+        </CardTitle>
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 px-8 pb-6">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs uppercase tracking-[0.3em] text-slate-400">E-mail</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-600">Email address</label>
             <Input
               type="email"
-              placeholder="nome@smartbell.com"
+              placeholder="Enter your email address"
               value={form.email}
               onChange={(event) => setField("email")(event.target.value)}
               disabled={isPending}
-              className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
               autoComplete="email"
               required
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs uppercase tracking-[0.3em] text-slate-400">Senha</label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <label className="font-medium">Password</label>
+              {mode === "login" && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard?mode=login")}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
             <Input
               type="password"
-              placeholder="••••••••"
+              placeholder="Enter your password"
               value={form.password}
               onChange={(event) => setField("password")(event.target.value)}
               disabled={isPending}
-              className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
               autoComplete={isRegister ? "new-password" : "current-password"}
               minLength={6}
               required
@@ -208,17 +202,15 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
           </div>
 
           {isRegister && (
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                Confirmar senha
-              </label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-600">Confirm password</label>
               <Input
                 type="password"
-                placeholder="Digite novamente"
+                placeholder="Confirm your password"
                 value={form.confirm}
                 onChange={(event) => setField("confirm")(event.target.value)}
                 disabled={isPending}
-                className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
                 autoComplete="new-password"
                 minLength={6}
                 required
@@ -228,67 +220,64 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
 
           <Button
             type="submit"
-            className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-white shadow-lg shadow-primary/30 transition hover:-translate-y-0.5 hover:bg-primary/90"
+            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-800 text-sm font-semibold text-white shadow-inner shadow-slate-600/40"
             disabled={isSubmitDisabled}
           >
-            {isPending ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Processando...
-              </>
-            ) : mode === "login" ? (
-              <>
-                <LogIn className="h-4 w-4" />
-                Entrar agora
-              </>
-            ) : (
-              <>
-                <UserPlus className="h-4 w-4" />
-                Criar minha conta
-              </>
-            )}
+            {isPending ? "Processing..." : mode === "login" ? "Log In" : "Create account"}
           </Button>
         </form>
+
+        <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
+          <span className="h-px flex-1 bg-slate-200" />
+          OR
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <div className="space-y-2">
+          {socialProviders.map(({ id, label, icon }) => (
+            <button
+              key={id}
+              type="button"
+              className="flex h-10 w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition hover:border-slate-300"
+            >
+              <span className="text-base">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
 
         {feedback && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm",
               feedback.type === "success"
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                : "border-red-500/30 bg-red-500/10 text-red-200"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : "border-rose-100 bg-rose-50 text-rose-600"
             )}
           >
             {feedback.type === "success" ? (
-              <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+              <CheckCircle2 className="h-4 w-4" />
             ) : (
-              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <AlertCircle className="h-4 w-4" />
             )}
             <p className="flex-1 leading-relaxed">{feedback.message}</p>
           </div>
         )}
       </CardContent>
 
-      <CardFooter className="flex flex-col gap-3 border-t border-white/5 pt-4 text-xs text-slate-400">
-        <div className="flex items-center justify-between">
+      <CardFooter className="flex flex-col gap-6 rounded-b-[28px] border-t border-slate-100 bg-slate-50 px-8 py-6 text-center text-sm text-slate-500">
+        <p>
+          Don’t have an account yet?{" "}
           <button
             type="button"
-            onClick={() => router.push("/dashboard?mode=login")}
-            className="text-primary/90 underline-offset-4 transition hover:text-primary"
+            className="font-semibold text-slate-800 hover:text-slate-900"
+            onClick={() => setMode(mode === "login" ? "register" : "login")}
           >
-            Esqueceu a senha?
+            {mode === "login" ? "Sign up" : "Log in"}
           </button>
-          <span className="text-slate-500">Suporte 24/7</span>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <p className="leading-relaxed">
-            Supabase Auth + FCM protegem seus dados com criptografia e tokens seguros.
-          </p>
-        </div>
+        </p>
+        <p className="text-xs text-slate-400">Smart Bell OS · Residents portal</p>
       </CardFooter>
     </Card>
   );
 }
-
-

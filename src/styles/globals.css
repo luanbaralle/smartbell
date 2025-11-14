@@ -16,3 +16,10 @@ a {
   @apply text-primary underline-offset-4 transition hover:underline;
 }
 
+@media (forced-colors: active) {
+  :root,
+  body {
+    forced-color-adjust: none;
+  }
+}
+
