@@ -98,11 +98,24 @@ export default async function DashboardPage({
         role: "morador"
       } satisfies Database["public"]["Tables"]["users"]["Insert"];
 
+    const supabaseUsers = supabase.from("users") as unknown as {
+      upsert(
+        values: Database["public"]["Tables"]["users"]["Insert"][],
+        options?: { onConflict?: string }
+      ): {
+        select(): {
+          single(): Promise<{
+            data: Database["public"]["Tables"]["users"]["Row"] | null;
+            error: unknown;
+          }>;
+        };
+      };
+    };
+
     const {
       data: insertedProfile,
       error: insertProfileError
-    } = await supabase
-      .from("users")
+    } = await supabaseUsers
       .upsert([upsertPayload], { onConflict: "id" })
       .select()
       .single();
