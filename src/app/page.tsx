@@ -22,77 +22,75 @@ const metrics = [
 
 export default function HomePage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_20%,rgba(59,130,246,0.35),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.28),transparent_40%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-20" aria-hidden="true">
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(148,163,184,0.08)_35%,transparent_70%)] blur-[90px]" />
-      </div>
+    <main className="min-h-screen bg-slate-950/95 py-16 px-4 text-slate-50">
+      <div className="mx-auto max-w-6xl space-y-12">
+        <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900/70 to-slate-950 shadow-[0_35px_120px_-40px_rgba(15,23,42,0.8)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.35),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.25),transparent_40%)] opacity-70" />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-16 px-6 py-14 sm:px-8 lg:px-12 lg:py-20">
-        <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <section className="space-y-10">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-200">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <div className="relative grid gap-12 px-8 py-12 lg:grid-cols-[1.1fr_420px] lg:items-center">
+            <section className="space-y-8 text-slate-100">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-slate-200">
+                <Sparkles className="h-4 w-4 text-primary" />
                 Smart Bell OS
-              </span>
-              <span className="hidden h-4 w-px bg-white/10 sm:block" />
-              <span>Interfone PWA · Notificações push · WebRTC</span>
-            </div>
-
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 text-slate-400">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-lg shadow-primary/40">
-                  <Bell className="h-6 w-6" />
-                </div>
-                <span className="text-sm">Versão Beta · 2025</span>
               </div>
-              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
-                O interfone digital que transforma visitas em experiências premium.
-              </h1>
-              <p className="text-lg text-slate-300 sm:text-xl">
-                Visitantes escaneiam o QR Code, batem à porta e você atende pelo dashboard com chat,
-                áudio ou vídeo instantâneo. Tudo com registro no Supabase e notificações via Firebase.
-              </p>
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {heroHighlights.map(({ title, description, icon: Icon }) => (
-                <article
-                  key={title}
-                  className="group rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_30px_120px_-45px_rgba(56,189,248,0.65)] transition hover:-translate-y-1 hover:border-primary/40"
-                >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-                    <Icon className="h-5 w-5" />
+              <div className="space-y-5">
+                <div className="flex items-center gap-3 text-slate-300">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-primary shadow-lg shadow-primary/40">
+                    <Bell className="h-6 w-6" />
                   </div>
-                  <p className="text-base font-semibold text-white">{title}</p>
-                  <p className="text-sm text-slate-400">{description}</p>
-                </article>
-              ))}
-            </div>
-          </section>
+                  <span className="text-sm">Interfone PWA · WebRTC · Push Notifications</span>
+                </div>
+                <h1 className="text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
+                  A campainha digital com experiência de aplicativo premium.
+                </h1>
+                <p className="text-base text-slate-300 sm:text-lg">
+                  Visitantes escaneiam o QR Code, chamam pelo PWA e você atende em tempo real com
+                  chat, áudio ou vídeo. Tudo sincronizado via Supabase e notificações pelo Firebase.
+                </p>
+              </div>
 
-          <section className="flex justify-center">
-            <div className="w-full max-w-md">
-              <SignInCard />
-            </div>
-          </section>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {heroHighlights.map(({ title, description, icon: Icon }) => (
+                  <article
+                    key={title}
+                    className="rounded-3xl border border-white/15 bg-white/10 p-5 text-left shadow-[0_30px_120px_-45px_rgba(56,189,248,0.65)]"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/20 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <p className="text-base font-semibold text-white">{title}</p>
+                    <p className="text-sm text-slate-300">{description}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="flex justify-center">
+              <div className="w-full max-w-sm">
+                <SignInCard />
+              </div>
+            </section>
+          </div>
         </div>
 
-        <section className="rounded-3xl border border-white/5 bg-gradient-to-br from-white/5 via-white/0 to-white/5 p-8 shadow-[0_35px_150px_-60px_rgba(59,130,246,0.7)] backdrop-blur">
+        <section className="rounded-3xl border border-white/5 bg-white/5 p-8 backdrop-blur">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+            <div className="max-w-2xl space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-300">
                 Operação em números
               </p>
-              <p className="text-lg text-slate-300">
+              <p className="text-lg text-slate-200">
                 Supabase + FCM garantem monitoramento em tempo real, com logs persistentes e push
                 instantâneo para moradores.
               </p>
             </div>
             <div className="grid flex-1 gap-6 sm:grid-cols-3">
               {metrics.map(({ value, label }) => (
-                <div key={label} className="rounded-2xl border border-white/10 p-4 text-center">
+                <div
+                  key={label}
+                  className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-center"
+                >
                   <p className="text-3xl font-semibold text-white">{value}</p>
                   <p className="text-xs uppercase tracking-[0.35em] text-slate-500">{label}</p>
                 </div>

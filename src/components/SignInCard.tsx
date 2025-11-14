@@ -143,21 +143,21 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
     ];
 
   return (
-    <Card className="w-full max-w-xl border border-white/10 bg-slate-900/85 backdrop-blur-xl shadow-[0_35px_140px_-60px_rgba(59,130,246,0.7)]">
+    <Card className="w-full max-w-xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
       <CardHeader className="space-y-7 pb-4">
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-[0.4em] text-primary/70">
             Painel do morador
           </p>
-          <CardTitle className="text-[2rem] font-semibold leading-snug text-white">
+          <CardTitle className="text-[2rem] font-semibold leading-snug text-slate-900">
             Login seguro com Supabase Auth
           </CardTitle>
-          <CardDescription className="text-base text-slate-400">
+          <CardDescription className="text-base text-slate-500">
             Gerencie notificações, chamadas e respostas rápidas diretamente do seu navegador.
           </CardDescription>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1">
           {tabs.map(({ id, label, description, icon: Icon }) => (
             <button
               key={id}
@@ -169,18 +169,20 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               className={cn(
                 "group flex flex-col rounded-xl px-4 py-3 text-left transition-all",
                 mode === id
-                  ? "bg-white/90 text-slate-900 shadow-lg shadow-primary/20"
-                  : "text-slate-300 hover:bg-white/10"
+                  ? "bg-white text-slate-900 shadow-lg shadow-primary/15"
+                  : "text-slate-500 hover:bg-white"
               )}
             >
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <Icon className={cn("h-4 w-4", mode === id ? "text-primary" : "text-slate-400")} />
+                <Icon
+                  className={cn("h-4 w-4", mode === id ? "text-primary" : "text-slate-400")}
+                />
                 <span className={mode === id ? "text-slate-900" : ""}>{label}</span>
               </div>
               <span
                 className={cn(
                   "text-xs",
-                  mode === id ? "text-slate-500" : "text-slate-500 group-hover:text-slate-300"
+                  mode === id ? "text-slate-500" : "text-slate-500 group-hover:text-slate-400"
                 )}
               >
                 {description}
@@ -193,7 +195,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
       <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-3">
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
               E-mail
             </label>
             <Input
@@ -202,14 +204,14 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               value={form.email}
               onChange={(event) => setField("email")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="h-12 border-slate-200 bg-slate-50 text-base text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/30"
               autoComplete="email"
               required
             />
           </div>
 
           <div className="grid gap-3">
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Senha
             </label>
             <Input
@@ -218,7 +220,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               value={form.password}
               onChange={(event) => setField("password")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="h-12 border-slate-200 bg-slate-50 text-base text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/30"
               autoComplete={isRegister ? "new-password" : "current-password"}
               minLength={6}
               required
@@ -230,7 +232,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
 
           {isRegister && (
             <div className="grid gap-3">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Confirmar senha
               </label>
               <Input
@@ -239,7 +241,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 value={form.confirm}
                 onChange={(event) => setField("confirm")(event.target.value)}
                 disabled={isPending}
-                className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="h-12 border-slate-200 bg-slate-50 text-base text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/30"
                 autoComplete="new-password"
                 minLength={6}
                 required
@@ -280,8 +282,8 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
             className={cn(
               "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm",
               feedback.type === "success"
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                : "border-red-500/30 bg-red-500/5 text-red-400"
+                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700"
+                : "border-red-500/30 bg-red-50 text-red-600"
             )}
           >
             {feedback.type === "success" ? (
@@ -293,7 +295,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
           </div>
         )}
 
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <p className="leading-relaxed">
             Seus dados são protegidos com Supabase Auth, criptografia e notificações seguras
