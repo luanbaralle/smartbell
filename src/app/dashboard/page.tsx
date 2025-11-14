@@ -90,17 +90,20 @@ export default async function DashboardPage({
   let profile = profileRow as UserProfile | null;
 
   if (!profile) {
+    const upsertPayload =
+      {
+        id: user.id,
+        email: user.email ?? "",
+        fcm_token: null,
+        role: "morador"
+      } satisfies Database["public"]["Tables"]["users"]["Insert"];
+
     const {
       data: insertedProfile,
       error: insertProfileError
     } = await supabase
       .from("users")
-      .upsert({
-        id: user.id,
-        email: user.email ?? "",
-        fcm_token: null,
-        role: "morador"
-      })
+      .upsert(upsertPayload, { onConflict: "id" })
       .select()
       .single();
 
