@@ -1,126 +1,304 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Mail, CheckCircle2, AlertCircle } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  CheckCircle2,
+  LogIn,
+  ShieldCheck,
+  UserPlus
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { requestMagicLink } from "@/app/dashboard/actions";
+import { loginWithPassword, registerWithPassword } from "@/app/dashboard/actions";
 import { cn } from "@/lib/utils";
 
 type SignInCardProps = {
   errorMessage?: string | null;
 };
 
+type AuthMode = "login" | "register";
+
+type Feedback =
+  | {
+      type: "success" | "error";
+      message: string;
+    }
+  | null;
+
 export function SignInCard({ errorMessage }: SignInCardProps = {}) {
-  const [email, setEmail] = useState("");
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
+  const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    confirm: ""
+  });
+  const [feedback, setFeedback] = useState<Feedback>(() =>
     errorMessage ? { type: "error", message: errorMessage } : null
   );
   const [isPending, startTransition] = useTransition();
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!email.trim()) return;
-    
+  const isRegister = mode === "register";
+
+  const isSubmitDisabled = useMemo(() => {
+    if (!form.email.trim() || form.password.length < 6) {
+      return true;
+    }
+    if (isRegister && form.password !== form.confirm) {
+      return true;
+    }
+    return isPending;
+  }, [form, isRegister, isPending]);
+
+  const setField =
+    (field: keyof typeof form) =>
+    (value: string) => {
+      setForm((current) => ({ ...current, [field]: value }));
+      setFeedback(null);
+    };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isSubmitDisabled) return;
+
     startTransition(async () => {
       try {
-        await requestMagicLink(email.trim());
-        setFeedback({
-          type: "success",
-          message: "Link de acesso enviado! Verifique sua caixa de entrada."
+        if (mode === "login") {
+          await loginWithPassword({
+            email: form.email.trim(),
+            password: form.password
+          });
+          setFeedback({
+            type: "success",
+            message: "Login realizado com sucesso! Redirecionando..."
+          });
+          router.push("/dashboard");
+          router.refresh();
+          return;
+        }
+
+        const result = await registerWithPassword({
+          email: form.email.trim(),
+          password: form.password
         });
-        setEmail("");
+
+        if (result.requiresEmailConfirmation) {
+          setFeedback({
+            type: "success",
+            message:
+              "Conta criada! Enviamos um e-mail de confirmação para você continuar."
+          });
+        } else {
+          setFeedback({
+            type: "success",
+            message: "Conta criada! Redirecionando para o painel..."
+          });
+          router.push("/dashboard");
+          router.refresh();
+        }
+
+        setMode("login");
+        setForm({
+          email: form.email.trim(),
+          password: "",
+          confirm: ""
+        });
       } catch (error) {
         console.error(error);
         setFeedback({
           type: "error",
-          message: "Não foi possível enviar o link. Verifique o e-mail e tente novamente."
+          message:
+            error instanceof Error
+              ? error.message
+              : "Não foi possível concluir a ação. Tente novamente."
         });
       }
     });
   };
 
+  const tabs: { id: AuthMode; label: string; description: string; icon: typeof LogIn }[] =
+    [
+      {
+        id: "login",
+        label: "Entrar",
+        description: "Já sou morador",
+        icon: LogIn
+      },
+      {
+        id: "register",
+        label: "Criar conta",
+        description: "Primeiro acesso",
+        icon: UserPlus
+      }
+    ];
+
   return (
-    <Card className="w-full max-w-md border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-950/90 backdrop-blur-xl shadow-2xl">
-      <CardHeader className="space-y-2 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <Mail className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <CardTitle className="text-2xl font-bold text-slate-100">
-              Acessar painel
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Entre com seu e-mail
-            </CardDescription>
-          </div>
+    <Card className="w-full max-w-xl border border-slate-800/70 bg-slate-900/80 backdrop-blur-xl shadow-[0_25px_120px_-40px_rgba(15,118,255,0.6)]">
+      <CardHeader className="space-y-6 pb-2">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.3em] text-primary/70">
+            Smart Bell OS
+          </p>
+          <CardTitle className="text-3xl font-semibold text-slate-50">
+            Controle seu interfone inteligente
+          </CardTitle>
+          <CardDescription className="text-base text-slate-400">
+            Autentique-se para gerenciar visitas, chamadas em tempo real e notificações
+            instantâneas.
+          </CardDescription>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
+          {tabs.map(({ id, label, description, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setMode(id);
+                setFeedback(null);
+              }}
+              className={cn(
+                "group flex flex-col rounded-xl px-4 py-3 text-left transition",
+                mode === id
+                  ? "bg-white/5 text-white shadow-inner shadow-primary/20"
+                  : "text-slate-400 hover:text-white"
+              )}
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Icon className="h-4 w-4" />
+                {label}
+              </div>
+              <span className="text-xs text-slate-500 group-hover:text-slate-300">
+                {description}
+              </span>
+            </button>
+          ))}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+
+      <CardContent className="space-y-5">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label 
-              className="text-sm font-medium text-slate-300" 
-              htmlFor="email"
-            >
+          <div className="grid gap-3">
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
               E-mail
             </label>
             <Input
-              id="email"
               type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setFeedback(null);
-              }}
+              placeholder="nome@smartbell.com"
+              value={form.email}
+              onChange={(event) => setField("email")(event.target.value)}
               disabled={isPending}
-              className="h-12 text-base"
-              autoFocus
+              className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+              autoComplete="email"
+              required
             />
           </div>
-          
+
+          <div className="grid gap-3">
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              Senha
+            </label>
+            <Input
+              type="password"
+              placeholder="••••••••"
+              value={form.password}
+              onChange={(event) => setField("password")(event.target.value)}
+              disabled={isPending}
+              className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+              autoComplete={isRegister ? "new-password" : "current-password"}
+              minLength={6}
+              required
+            />
+            <p className="text-xs text-slate-500">
+              Use ao menos 6 caracteres. Dica: combine letras, números e símbolos.
+            </p>
+          </div>
+
+          {isRegister && (
+            <div className="grid gap-3">
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                Confirmar senha
+              </label>
+              <Input
+                type="password"
+                placeholder="Digite novamente"
+                value={form.confirm}
+                onChange={(event) => setField("confirm")(event.target.value)}
+                disabled={isPending}
+                className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+                autoComplete="new-password"
+                minLength={6}
+                required
+              />
+            </div>
+          )}
+
           <Button
             type="submit"
-            className="w-full h-12 text-base font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
-            disabled={isPending || !email.trim()}
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold shadow-lg shadow-primary/20 transition hover:shadow-primary/40"
+            disabled={isSubmitDisabled}
           >
             {isPending ? (
               <>
-                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Enviando...
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Processando...
               </>
             ) : (
               <>
-                <Mail className="mr-2 h-4 w-4" />
-                Receber link de acesso
+                {mode === "login" ? (
+                  <>
+                    <LogIn className="h-4 w-4" />
+                    Entrar agora
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Criar minha conta
+                  </>
+                )}
               </>
             )}
           </Button>
         </form>
-        
+
         {feedback && (
           <div
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-3 text-sm",
+              "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm",
               feedback.type === "success"
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                : "border-red-500/30 bg-red-500/10 text-red-400"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : "border-red-500/30 bg-red-500/5 text-red-400"
             )}
           >
             {feedback.type === "success" ? (
-              <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
             ) : (
-              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
             )}
-            <p className="flex-1">{feedback.message}</p>
+            <p className="flex-1 leading-relaxed">{feedback.message}</p>
           </div>
         )}
+
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/30 px-4 py-3 text-xs text-slate-400">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <p className="leading-relaxed">
+            Seus dados são protegidos com Supabase Auth, criptografia e notificações seguras
+            via Firebase.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
 }
+
 

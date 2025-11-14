@@ -29,34 +29,61 @@ async function createActionSupabaseClient() {
   });
 }
 
-export async function requestMagicLink(email: string) {
-  const supabase = await createActionSupabaseClient();
-  
-  // Detectar URL base: usar VERCEL_URL em produção, NEXT_PUBLIC_APP_URL se definido, ou fallback
+type CredentialsPayload = {
+  email: string;
+  password: string;
+};
+
+function resolveBaseUrl() {
   const vercelUrl = process.env.VERCEL_URL;
-  const baseUrl = 
-    env.NEXT_PUBLIC_APP_URL || 
+  return (
+    env.NEXT_PUBLIC_APP_URL ||
     (vercelUrl ? `https://${vercelUrl}` : null) ||
-    "https://smartbell-nine.vercel.app";
-  
-  // Usar rota de callback dedicada
-  const redirectTo = baseUrl.endsWith("/auth/callback")
-    ? baseUrl
-    : `${baseUrl}/auth/callback`;
+    "http://localhost:3000"
+  );
+}
 
-  console.log("[SmartBell] Magic link redirectTo:", redirectTo);
+export async function registerWithPassword({ email, password }: CredentialsPayload) {
+  const supabase = await createActionSupabaseClient();
+  const baseUrl = resolveBaseUrl();
 
-  const { error } = await supabase.auth.signInWithOtp({
+  const { data, error } = await supabase.auth.signUp({
     email,
+    password,
     options: {
-      emailRedirectTo: redirectTo
+      emailRedirectTo: `${baseUrl}/dashboard`
     }
   });
 
   if (error) {
-    console.error("[SmartBell] magic link error", error);
-    throw new Error("Não foi possível enviar o link de acesso.");
+    console.error("[SmartBell] register error", error);
+    throw new Error(
+      error.message || "Não foi possível criar sua conta. Tente novamente."
+    );
   }
+
+  return {
+    requiresEmailConfirmation: !data.session,
+    userId: data.user?.id ?? null
+  };
+}
+
+export async function loginWithPassword({ email, password }: CredentialsPayload) {
+  const supabase = await createActionSupabaseClient();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) {
+    console.error("[SmartBell] login error", error);
+    throw new Error("Credenciais inválidas. Verifique e-mail e senha.");
+  }
+
+  return {
+    userId: data.user?.id ?? null
+  };
 }
 
 export async function signOut() {
