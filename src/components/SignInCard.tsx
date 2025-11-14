@@ -2,13 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AlertCircle,
-  CheckCircle2,
-  LogIn,
-  ShieldCheck,
-  UserPlus
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +29,21 @@ type Feedback =
       message: string;
     }
   | null;
+
+const tabs: { id: AuthMode; label: string; description: string; icon: typeof LogIn }[] = [
+  {
+    id: "login",
+    label: "Entrar",
+    description: "Já sou morador",
+    icon: LogIn
+  },
+  {
+    id: "register",
+    label: "Criar conta",
+    description: "Primeiro acesso",
+    icon: UserPlus
+  }
+];
 
 export function SignInCard({ errorMessage }: SignInCardProps = {}) {
   const router = useRouter();
@@ -96,8 +105,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
         if (result.requiresEmailConfirmation) {
           setFeedback({
             type: "success",
-            message:
-              "Conta criada! Enviamos um e-mail de confirmação para você continuar."
+            message: "Conta criada! Enviamos um e-mail de confirmação para você continuar."
           });
         } else {
           setFeedback({
@@ -127,36 +135,14 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
     });
   };
 
-  const tabs: { id: AuthMode; label: string; description: string; icon: typeof LogIn }[] =
-    [
-      {
-        id: "login",
-        label: "Entrar",
-        description: "Já sou morador",
-        icon: LogIn
-      },
-      {
-        id: "register",
-        label: "Criar conta",
-        description: "Primeiro acesso",
-        icon: UserPlus
-      }
-    ];
-
   return (
-    <Card className="w-full max-w-md border border-white/10 bg-gradient-to-br from-[#111b2f] via-[#0b1324] to-[#101626] text-slate-100 shadow-[0_45px_140px_-60px_rgba(15,23,42,1)]">
-      <CardHeader className="space-y-6 pb-3">
-        <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
-          <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-          Painel exclusivo
-        </div>
+    <Card className="w-full max-w-md border border-white/10 bg-[#11182b]/80 backdrop-blur-xl text-white shadow-[0_40px_140px_-70px_rgba(0,0,0,1)]">
+      <CardHeader className="space-y-5 pb-2">
         <div className="space-y-2">
-          <CardTitle className="text-[1.9rem] font-semibold leading-snug text-white">
-            Acesse o Smart Bell OS
-          </CardTitle>
-          <CardDescription className="text-base text-slate-400">
-            Autenticação segura, sincronizada ao Supabase. Controle visitas, chamadas e push em um
-            único lugar.
+          <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Painel do morador</p>
+          <CardTitle className="text-2xl font-semibold text-white">Acesse o Smart Bell OS</CardTitle>
+          <CardDescription className="text-sm text-slate-400">
+            Autenticação segura com Supabase. Centralize chamadas e notificações em um só lugar.
           </CardDescription>
         </div>
 
@@ -172,7 +158,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               className={cn(
                 "group flex flex-col rounded-xl px-4 py-3 text-left transition-all",
                 mode === id
-                  ? "bg-white text-slate-900 shadow-inner shadow-primary/10"
+                  ? "bg-white text-slate-900 shadow-lg shadow-primary/20"
                   : "text-slate-200 hover:bg-white/10"
               )}
             >
@@ -181,10 +167,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 <span className={mode === id ? "text-slate-900" : ""}>{label}</span>
               </div>
               <span
-                className={cn(
-                  "text-xs",
-                  mode === id ? "text-slate-500" : "text-slate-500 group-hover:text-slate-300"
-                )}
+                className={cn("text-xs text-slate-400", mode === id && "text-slate-500")}
               >
                 {description}
               </span>
@@ -193,47 +176,40 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-5">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3">
-            <label className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
-              E-mail
-            </label>
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-[0.3em] text-slate-400">E-mail</label>
             <Input
               type="email"
               placeholder="nome@smartbell.com"
               value={form.email}
               onChange={(event) => setField("email")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-white/10 bg-white/5 text-base text-white placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
               autoComplete="email"
               required
             />
           </div>
 
-          <div className="grid gap-3">
-            <label className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
-              Senha
-            </label>
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-[0.3em] text-slate-400">Senha</label>
             <Input
               type="password"
               placeholder="••••••••"
               value={form.password}
               onChange={(event) => setField("password")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-white/10 bg-white/5 text-base text-white placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
               autoComplete={isRegister ? "new-password" : "current-password"}
               minLength={6}
               required
             />
-            <p className="text-xs text-slate-500">
-              Use ao menos 6 caracteres. Dica: combine letras, números e símbolos.
-            </p>
           </div>
 
           {isRegister && (
-            <div className="grid gap-3">
-              <label className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
+            <div className="space-y-2">
+              <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
                 Confirmar senha
               </label>
               <Input
@@ -242,7 +218,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 value={form.confirm}
                 onChange={(event) => setField("confirm")(event.target.value)}
                 disabled={isPending}
-                className="h-12 border-white/10 bg-white/5 text-base text-white placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="h-11 border-white/10 bg-white/10 text-sm text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/40"
                 autoComplete="new-password"
                 minLength={6}
                 required
@@ -252,7 +228,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
 
           <Button
             type="submit"
-            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-white shadow-lg shadow-primary/30 transition hover:-translate-y-0.5 hover:bg-primary/90"
+            className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-white shadow-lg shadow-primary/30 transition hover:-translate-y-0.5 hover:bg-primary/90"
             disabled={isSubmitDisabled}
           >
             {isPending ? (
@@ -260,19 +236,15 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Processando...
               </>
+            ) : mode === "login" ? (
+              <>
+                <LogIn className="h-4 w-4" />
+                Entrar agora
+              </>
             ) : (
               <>
-                {mode === "login" ? (
-                  <>
-                    <LogIn className="h-4 w-4" />
-                    Entrar agora
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" />
-                    Criar minha conta
-                  </>
-                )}
+                <UserPlus className="h-4 w-4" />
+                Criar minha conta
               </>
             )}
           </Button>
@@ -298,22 +270,21 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
       </CardContent>
 
       <CardFooter className="flex flex-col gap-3 border-t border-white/5 pt-4 text-xs text-slate-400">
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <p className="leading-relaxed">
-            Seus dados são protegidos com Supabase Auth, criptografia e notificações seguras via
-            Firebase.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+        <div className="flex items-center justify-between">
           <button
             type="button"
-            className="text-primary/90 underline-offset-4 transition hover:text-primary"
             onClick={() => router.push("/dashboard?mode=login")}
+            className="text-primary/90 underline-offset-4 transition hover:text-primary"
           >
             Esqueceu a senha?
           </button>
-          <span className="text-slate-500">Suporte 24/7 · suporte@smartbell.com</span>
+          <span className="text-slate-500">Suporte 24/7</span>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <p className="leading-relaxed">
+            Supabase Auth + FCM protegem seus dados com criptografia e tokens seguros.
+          </p>
         </div>
       </CardFooter>
     </Card>
