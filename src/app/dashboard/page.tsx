@@ -103,7 +103,7 @@ export default async function DashboardPage({
       error: insertProfileError
     } = await supabase
       .from("users")
-      .upsert(upsertPayload, { onConflict: "id" })
+      .upsert([upsertPayload], { onConflict: "id" })
       .select()
       .single();
 
