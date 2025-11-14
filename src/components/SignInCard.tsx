@@ -143,22 +143,21 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
     ];
 
   return (
-    <Card className="w-full max-w-xl border border-slate-800/70 bg-slate-900/80 backdrop-blur-xl shadow-[0_25px_120px_-40px_rgba(15,118,255,0.6)]">
-      <CardHeader className="space-y-6 pb-2">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-primary/70">
-            Smart Bell OS
+    <Card className="w-full max-w-xl border border-white/10 bg-slate-900/85 backdrop-blur-xl shadow-[0_35px_140px_-60px_rgba(59,130,246,0.7)]">
+      <CardHeader className="space-y-7 pb-4">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
+            Painel do morador
           </p>
-          <CardTitle className="text-3xl font-semibold text-slate-50">
-            Controle seu interfone inteligente
+          <CardTitle className="text-[2rem] font-semibold leading-snug text-white">
+            Login seguro com Supabase Auth
           </CardTitle>
           <CardDescription className="text-base text-slate-400">
-            Autentique-se para gerenciar visitas, chamadas em tempo real e notificações
-            instantâneas.
+            Gerencie notificações, chamadas e respostas rápidas diretamente do seu navegador.
           </CardDescription>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
           {tabs.map(({ id, label, description, icon: Icon }) => (
             <button
               key={id}
@@ -168,17 +167,22 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 setFeedback(null);
               }}
               className={cn(
-                "group flex flex-col rounded-xl px-4 py-3 text-left transition",
+                "group flex flex-col rounded-xl px-4 py-3 text-left transition-all",
                 mode === id
-                  ? "bg-white/5 text-white shadow-inner shadow-primary/20"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-white/90 text-slate-900 shadow-lg shadow-primary/20"
+                  : "text-slate-300 hover:bg-white/10"
               )}
             >
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <Icon className="h-4 w-4" />
-                {label}
+                <Icon className={cn("h-4 w-4", mode === id ? "text-primary" : "text-slate-400")} />
+                <span className={mode === id ? "text-slate-900" : ""}>{label}</span>
               </div>
-              <span className="text-xs text-slate-500 group-hover:text-slate-300">
+              <span
+                className={cn(
+                  "text-xs",
+                  mode === id ? "text-slate-500" : "text-slate-500 group-hover:text-slate-300"
+                )}
+              >
                 {description}
               </span>
             </button>
@@ -186,7 +190,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-3">
             <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -198,7 +202,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               value={form.email}
               onChange={(event) => setField("email")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+              className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
               autoComplete="email"
               required
             />
@@ -214,7 +218,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
               value={form.password}
               onChange={(event) => setField("password")(event.target.value)}
               disabled={isPending}
-              className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+              className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
               autoComplete={isRegister ? "new-password" : "current-password"}
               minLength={6}
               required
@@ -235,7 +239,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
                 value={form.confirm}
                 onChange={(event) => setField("confirm")(event.target.value)}
                 disabled={isPending}
-                className="h-12 border-slate-800 bg-slate-950/40 text-base text-slate-100 placeholder:text-slate-600 focus-visible:ring-primary/50"
+                className="h-12 border-white/10 bg-white/5 text-base text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/30"
                 autoComplete="new-password"
                 minLength={6}
                 required
@@ -245,7 +249,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
 
           <Button
             type="submit"
-            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold shadow-lg shadow-primary/20 transition hover:shadow-primary/40"
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold shadow-lg shadow-primary/20 transition hover:-translate-y-0.5 hover:shadow-primary/40"
             disabled={isSubmitDisabled}
           >
             {isPending ? (
@@ -289,7 +293,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
           </div>
         )}
 
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/30 px-4 py-3 text-xs text-slate-400">
+        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <p className="leading-relaxed">
             Seus dados são protegidos com Supabase Auth, criptografia e notificações seguras
