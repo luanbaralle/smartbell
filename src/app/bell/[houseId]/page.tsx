@@ -26,13 +26,11 @@ export default async function BellHousePage({ params }: PageProps) {
     : [];
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-6">
-      <CallClient
-        house={house}
-        initialCall={initialCall}
-        initialMessages={initialMessages}
-      />
-    </main>
+    <CallClient
+      house={house}
+      initialCall={initialCall}
+      initialMessages={initialMessages}
+    />
   );
 }
 

@@ -8,7 +8,7 @@ import {
   useState,
   useTransition
 } from "react";
-import { MessageSquare, PhoneIncoming, Send } from "lucide-react";
+import { MessageSquare, Phone, Video, Bell, LogOut, Plus, PhoneIncoming, Send } from "lucide-react";
 
 import { NotificationButton } from "@/components/NotificationButton";
 import { ChatWindow } from "@/components/ChatWindow";
@@ -16,6 +16,7 @@ import { AudioRecorder } from "@/components/AudioRecorder";
 import { AudioCall } from "@/components/AudioCall";
 import { VideoCall } from "@/components/VideoCall";
 import { StatusBadge } from "@/components/StatusBadge";
+import { QRDisplay } from "@/components/QRDisplay";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -364,18 +365,24 @@ export function DashboardClient({
   }, [acceptVideoCall, selectedCallId]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Bem-vindo, {profile.email}</CardTitle>
-              <CardDescription>
-                Gerencie suas chamadas em tempo real e responda aos visitantes.
-              </CardDescription>
+    <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
+      {/* Header */}
+      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gradient-primary flex items-center justify-center">
+                <Bell className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Smart Bell</h1>
+                <p className="text-sm text-muted-foreground">Painel de Controle</p>
+              </div>
             </div>
-            <Button
-              variant="outline"
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
               onClick={() =>
                 startSignOut(async () => {
                   await signOut();
@@ -384,124 +391,174 @@ export function DashboardClient({
               }
               disabled={isSigningOut}
             >
+              <LogOut className="h-4 w-4" />
               Sair
             </Button>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-6">
-            <div>
-              <p className="text-3xl font-semibold">{housesList.length}</p>
-              <p className="text-sm text-slate-400">Casas vinculadas</p>
-            </div>
-            <div>
-              <p className="text-3xl font-semibold">
-                {callOrder.length}
-              </p>
-              <p className="text-sm text-slate-400">Chamadas registradas</p>
-            </div>
-            <div>
-              <p className="text-3xl font-semibold text-green-400">
-                {answeredCount}
-              </p>
-              <p className="text-sm text-slate-400">Chamadas atendidas</p>
-            </div>
-            <div>
-              <p className="text-3xl font-semibold text-red-400">
-                {missedCount}
-              </p>
-              <p className="text-sm text-slate-400">Chamadas perdidas</p>
-            </div>
-            <div>
-              <p className="text-3xl font-semibold text-amber-300">
-                {pendingCount}
-              </p>
-              <p className="text-sm text-slate-400">Chamadas pendentes</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Notificações Push</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <NotificationButton onToken={handleSaveFcm} />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </header>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr,3fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Chamadas</CardTitle>
-            <CardDescription>
-              Veja as chamadas recentes e selecione para responder.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {housesList.length === 0 && (
-              <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-                <p className="text-sm text-slate-300">
-                  Nenhuma casa cadastrada. Crie uma casa de teste para começar.
-                </p>
-                <Button
-                  onClick={handleCreateHouse}
-                  disabled={isCreatingHouse}
-                  className="w-full"
-                >
-                  {isCreatingHouse ? "Criando..." : "Criar Casa de Teste"}
-                </Button>
-              </div>
-            )}
-            {callOrder.length === 0 && housesList.length > 0 && (
-              <p className="text-sm text-slate-400">
-                Nenhuma chamada registrada até o momento.
-              </p>
-            )}
-            <div className="space-y-2">
-              {callOrder.map((callId) => {
-                const call = callMap[callId];
-                if (!call) return null;
-                return (
-                  <button
-                    key={call.id}
-                    onClick={() => setSelectedCallId(call.id)}
-                    className={cn(
-                      "w-full rounded-md border border-slate-800 bg-slate-900/50 p-3 text-left transition hover:bg-slate-900",
-                      selectedCallId === call.id && "border-primary bg-slate-900"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
-                        <PhoneIncoming className="h-4 w-4 text-primary" />
-                        {call.house.name}
-                      </div>
-                      <StatusBadge status={call.status} />
-                    </div>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {formatDate(call.created_at)} · {call.type.toUpperCase()}
+      <main className="container mx-auto px-4 py-8">
+        <div className="space-y-8">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Total de Chamadas
+                </CardTitle>
+                <Bell className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{callOrder.length}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Atendidas
+                </CardTitle>
+                <Phone className="h-4 w-4 text-success" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-success">{answeredCount}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Perdidas
+                </CardTitle>
+                <Video className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-destructive">{missedCount}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Pendentes
+                </CardTitle>
+                <MessageSquare className="h-4 w-4 text-warning" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-warning">{pendingCount}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* QR Code Section */}
+            <div className="lg:col-span-1 space-y-4">
+              {housesList.length > 0 ? (
+                <>
+                  <QRDisplay house={housesList[0]} />
+                  {housesList.length > 1 && (
+                    <Card>
+                      <CardContent className="pt-6">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {housesList.length - 1} outra(s) residência(s)
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="pt-6 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma casa cadastrada. Crie uma casa para começar.
                     </p>
-                  </button>
-                );
-              })}
+                    <Button
+                      onClick={handleCreateHouse}
+                      disabled={isCreatingHouse}
+                      className="w-full gap-2 bg-gradient-primary"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {isCreatingHouse ? "Criando..." : "Nova Residência"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Notificações Push</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <NotificationButton onToken={handleSaveFcm} />
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card className="min-h-[480px]">
-          <CardHeader>
-            <CardTitle>Detalhes da chamada</CardTitle>
-            <CardDescription>
-              Responda via texto ou áudio e atualize o status da chamada.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex h-full flex-col gap-4">
-            {selectedCall ? (
-              <>
-                <div className="flex w-full items-center justify-between rounded-md border border-slate-800 bg-slate-900/60 p-3">
+            {/* Recent Calls */}
+            <div className="lg:col-span-2">
+              <Card className="shadow-lg">
+                <CardHeader className="bg-gradient-card">
+                  <CardTitle>Chamadas Recentes</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {callOrder.length === 0 && housesList.length > 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Bell className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                      <p>Nenhuma chamada ainda</p>
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {callOrder.map((callId) => {
+                      const call = callMap[callId];
+                      if (!call) return null;
+                      return (
+                        <button
+                          key={call.id}
+                          onClick={() => setSelectedCallId(call.id)}
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors text-left",
+                            selectedCallId === call.id && "border-primary bg-primary/5"
+                          )}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Bell className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{call.house.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatDate(call.created_at)} · {call.type.toUpperCase()}
+                              </p>
+                            </div>
+                          </div>
+                          <StatusBadge status={call.status} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Call Details */}
+          {selectedCall && (
+            <Card className="shadow-lg">
+              <CardHeader className="bg-gradient-card">
+                <CardTitle>Detalhes da Chamada</CardTitle>
+                <CardDescription>
+                  Responda via texto ou áudio e atualize o status da chamada.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="flex w-full items-center justify-between rounded-md border bg-card p-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-100">
+                    <p className="text-sm font-semibold">
                       {selectedCall.house.name}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-muted-foreground">
                       Iniciada em {formatDate(selectedCall.created_at)}
                     </p>
                   </div>
@@ -515,13 +572,13 @@ export function DashboardClient({
                 />
 
                 {selectedCall.type === "audio" && (
-                  <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="rounded-md border bg-card p-4">
                     {audioPendingOffer && audioState !== "connected" ? (
                       <div className="flex flex-col gap-2">
-                        <p className="text-sm text-slate-300">
+                        <p className="text-sm text-muted-foreground">
                           Visitante iniciando chamada de voz.
                         </p>
-                        <Button onClick={() => void handleAcceptAudioCall()}>
+                        <Button onClick={() => void handleAcceptAudioCall()} className="bg-gradient-primary">
                           Atender chamada de voz
                         </Button>
                       </div>
@@ -541,13 +598,13 @@ export function DashboardClient({
                 )}
 
                 {selectedCall.type === "video" && (
-                  <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="rounded-md border bg-card p-4">
                     {videoPendingOffer && videoState !== "connected" ? (
                       <div className="flex flex-col gap-2">
-                        <p className="text-sm text-slate-300">
+                        <p className="text-sm text-muted-foreground">
                           Visitante aguardando vídeo chamada.
                         </p>
-                        <Button onClick={() => void handleAcceptVideoCall()}>
+                        <Button onClick={() => void handleAcceptVideoCall()} className="bg-gradient-primary">
                           Atender vídeo chamada
                         </Button>
                       </div>
@@ -583,7 +640,7 @@ export function DashboardClient({
 
                 <div
                   ref={audioSectionRef}
-                  className="rounded-md border border-slate-800 bg-slate-900/60 p-4"
+                  className="rounded-md border bg-card p-4"
                 >
                   <AudioRecorder onSave={handleAudioResponse} disabled={false} />
                 </div>
@@ -600,15 +657,11 @@ export function DashboardClient({
                     Marcar como perdida
                   </Button>
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-slate-400">
-                Selecione uma chamada para visualizar detalhes.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

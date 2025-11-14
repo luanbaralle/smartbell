@@ -91,6 +91,25 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+export async function sendMagicLink(email: string) {
+  const supabase = await createActionSupabaseClient();
+  const baseUrl = resolveBaseUrl();
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${baseUrl}/auth/callback`
+    }
+  });
+
+  if (error) {
+    console.error("[SmartBell] magic link error", error);
+    throw new Error(
+      error.message || "Não foi possível enviar o link mágico. Tente novamente."
+    );
+  }
+}
+
 export async function updateCallStatus(callId: string, status: CallStatus) {
   if (!supabaseAdminClient) {
     throw new Error("Supabase admin client not configured.");

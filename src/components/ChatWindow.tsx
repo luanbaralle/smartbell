@@ -1,8 +1,11 @@
 "use client";
 
 import { RefObject, useImperativeHandle, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Send, Mic } from "lucide-react";
 import type { Message } from "@/types";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -43,64 +46,105 @@ export function ChatWindow({
     }
   }
 
+  const handleSend = () => {
+    handleSubmit();
+  };
+
   return (
-    <div className="flex h-full min-h-[320px] flex-col gap-4">
-      <div className="flex-1 space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-900/40 p-3">
-        {messages.length === 0 && (
-          <p className="text-sm text-slate-500">
-            Nenhuma mensagem enviada ainda.
-          </p>
-        )}
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex flex-col gap-1 rounded-md border border-slate-800 bg-slate-900/80 p-3 text-sm text-slate-100 shadow",
-              message.audio_url && "space-y-2"
+    <Card className="flex flex-col h-[500px] shadow-lg">
+      <CardHeader className="bg-gradient-card border-b">
+        <CardTitle className="text-lg">Mensagens</CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col p-0">
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-4">
+            {messages.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">Nenhuma mensagem ainda</p>
+                <p className="text-xs mt-1">Envie uma mensagem para iniciar a conversa</p>
+              </div>
+            ) : (
+              messages.map((message) => {
+                const isVisitor = !message.sender;
+                return (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex",
+                      isVisitor ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[80%] rounded-lg px-4 py-2 space-y-2",
+                        isVisitor
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted"
+                      )}
+                    >
+                      {message.content && (
+                        <p className="text-sm">{message.content}</p>
+                      )}
+                      {message.audio_url && (
+                        <audio controls className="w-full">
+                          <source src={message.audio_url} type="audio/webm" />
+                          Seu navegador não suporta áudio embutido.
+                        </audio>
+                      )}
+                      <p className="text-xs opacity-70 mt-1">
+                        {formatDate(message.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
             )}
-          >
-            {message.content && <p>{message.content}</p>}
-            {message.audio_url && (
-              <audio controls className="w-full">
-                <source src={message.audio_url} type="audio/webm" />
-                Seu navegador não suporta áudio embutido.
-              </audio>
-            )}
-            <span className="text-xs text-slate-500">
-              {formatDate(message.created_at)}
-            </span>
           </div>
-        ))}
-      </div>
-      <div className="space-y-2">
-        <Textarea
-          placeholder="Escreva uma mensagem..."
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          disabled={disabled || isSending}
-          ref={internalRef}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              handleSubmit();
-            }
-          }}
-        />
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-slate-500">
-            Pressione Enter para enviar.
-          </span>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={disabled || isSending}
-          >
-            Enviar
-          </Button>
+        </ScrollArea>
+        
+        <div className="p-4 border-t bg-card">
+          {error && (
+            <div className="mb-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2">
+              <p className="text-xs text-destructive">{error}</p>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button 
+              size="icon" 
+              variant="outline"
+              className="shrink-0"
+              disabled={disabled}
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+            <Input
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Digite sua mensagem..."
+              className="flex-1"
+              disabled={disabled || isSending}
+              ref={internalRef as any}
+            />
+            <Button 
+              size="icon"
+              onClick={handleSend}
+              className="shrink-0 bg-gradient-primary"
+              disabled={disabled || isSending || !text.trim()}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
-

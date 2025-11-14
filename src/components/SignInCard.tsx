@@ -1,283 +1,118 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Bell } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardFooter,
+  CardDescription,
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { loginWithPassword, registerWithPassword } from "@/app/dashboard/actions";
-import { cn } from "@/lib/utils";
+import { sendMagicLink } from "@/app/dashboard/actions";
 
 type SignInCardProps = {
   errorMessage?: string | null;
 };
 
-type AuthMode = "login" | "register";
-
-type Feedback =
-  | {
-      type: "success" | "error";
-      message: string;
-    }
-  | null;
-
-const tabs: { id: AuthMode; label: string }[] = [
-  { id: "login", label: "Login" },
-  { id: "register", label: "Sign Up" }
-];
-
-const socialProviders = [
-  { id: "google", label: "Continue with Google", icon: "G" },
-  { id: "apple", label: "Continue with Apple", icon: "" },
-  { id: "binance", label: "Continue with Binance", icon: "◇" },
-  { id: "wallet", label: "Continue with Wallet", icon: "↗" }
-];
-
 export function SignInCard({ errorMessage }: SignInCardProps = {}) {
-  const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("login");
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    confirm: ""
-  });
-  const [feedback, setFeedback] = useState<Feedback>(() =>
-    errorMessage ? { type: "error", message: errorMessage } : null
-  );
+  const [email, setEmail] = useState("");
   const [isPending, startTransition] = useTransition();
-
-  const isRegister = mode === "register";
-
-  const isSubmitDisabled = useMemo(() => {
-    if (!form.email.trim() || form.password.length < 6) {
-      return true;
-    }
-    if (isRegister && form.password !== form.confirm) {
-      return true;
-    }
-    return isPending;
-  }, [form, isRegister, isPending]);
-
-  const setField =
-    (field: keyof typeof form) =>
-    (value: string) => {
-      setForm((current) => ({ ...current, [field]: value }));
-      setFeedback(null);
-    };
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(errorMessage || null);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (isSubmitDisabled) return;
+    if (!email.trim() || isPending) return;
+
+    setError(null);
+    setSuccess(false);
 
     startTransition(async () => {
       try {
-        if (mode === "login") {
-          await loginWithPassword({
-            email: form.email.trim(),
-            password: form.password
-          });
-          setFeedback({
-            type: "success",
-            message: "Login realizado com sucesso! Redirecionando..."
-          });
-          router.push("/dashboard");
-          router.refresh();
-          return;
-        }
-
-        const result = await registerWithPassword({
-          email: form.email.trim(),
-          password: form.password
-        });
-
-        if (result.requiresEmailConfirmation) {
-          setFeedback({
-            type: "success",
-            message: "Conta criada! Enviamos um e-mail de confirmação para você continuar."
-          });
-        } else {
-          setFeedback({
-            type: "success",
-            message: "Conta criada! Redirecionando para o painel..."
-          });
-          router.push("/dashboard");
-          router.refresh();
-        }
-
-        setMode("login");
-        setForm({
-          email: form.email.trim(),
-          password: "",
-          confirm: ""
-        });
-      } catch (error) {
-        console.error(error);
-        setFeedback({
-          type: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Não foi possível concluir a ação. Tente novamente."
-        });
+        await sendMagicLink(email.trim());
+        setSuccess(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível enviar o link. Tente novamente."
+        );
       }
     });
   };
 
   return (
-    <Card className="mx-auto w-full max-w-xl rounded-[28px] border border-[#e3e6ed] bg-white shadow-[0px_40px_80px_rgba(15,23,42,0.08)]">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-center rounded-full bg-slate-100 p-1 text-sm font-semibold text-slate-500">
-          {tabs.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setMode(id);
-                setFeedback(null);
-              }}
-              className={cn(
-                "flex-1 rounded-full px-4 py-1 text-sm transition",
-                mode === id
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              )}
-            >
-              {label}
-            </button>
-          ))}
+    <Card className="w-full max-w-md shadow-lg animate-fade-in">
+      <CardHeader className="space-y-3 text-center">
+        <div className="mx-auto h-16 w-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
+          <Bell className="h-8 w-8 text-primary-foreground" />
         </div>
-        <CardTitle className="text-center text-lg font-semibold text-slate-800">
-          {mode === "login" ? "Welcome back" : "Create your account"}
-        </CardTitle>
+        <CardTitle className="text-2xl font-bold">Smart Bell</CardTitle>
+        <CardDescription className="text-base">
+          Entre com seu email para acessar o painel de controle
+        </CardDescription>
       </CardHeader>
-
-      <CardContent className="space-y-5 px-8 pb-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-600">Email address</label>
-            <Input
-              type="email"
-              placeholder="Enter your email address"
-              value={form.email}
-              onChange={(event) => setField("email")(event.target.value)}
-              disabled={isPending}
-              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-sm text-slate-600">
-              <label className="font-medium">Password</label>
-              {mode === "login" && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard?mode=login")}
-                  className="text-slate-500 hover:text-slate-700"
-                >
-                  Forgot password?
-                </button>
-              )}
+      <CardContent className="space-y-4">
+        {success ? (
+          <div className="space-y-4 text-center">
+            <div className="rounded-lg border border-success/20 bg-success/10 p-4">
+              <p className="text-sm font-medium text-success">
+                Link enviado com sucesso!
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Verifique seu email e clique no link para acessar o painel.
+              </p>
             </div>
-            <Input
-              type="password"
-              placeholder="Enter your password"
-              value={form.password}
-              onChange={(event) => setField("password")(event.target.value)}
-              disabled={isPending}
-              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
-              autoComplete={isRegister ? "new-password" : "current-password"}
-              minLength={6}
-              required
-            />
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setSuccess(false);
+                setEmail("");
+              }}
+            >
+              Enviar novo link
+            </Button>
           </div>
-
-          {isRegister && (
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-600">Confirm password</label>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
               <Input
-                type="password"
-                placeholder="Confirm your password"
-                value={form.confirm}
-                onChange={(event) => setField("confirm")(event.target.value)}
+                type="email"
+                placeholder="seu@email.com"
+                className="h-12"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null);
+                }}
                 disabled={isPending}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
-                autoComplete="new-password"
-                minLength={6}
                 required
+                autoComplete="email"
               />
             </div>
-          )}
-
-          <Button
-            type="submit"
-            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-800 text-sm font-semibold text-white shadow-inner shadow-slate-600/40"
-            disabled={isSubmitDisabled}
-          >
-            {isPending ? "Processing..." : mode === "login" ? "Log In" : "Create account"}
-          </Button>
-        </form>
-
-        <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
-          <span className="h-px flex-1 bg-slate-200" />
-          OR
-          <span className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        <div className="space-y-2">
-          {socialProviders.map(({ id, label, icon }) => (
-            <button
-              key={id}
-              type="button"
-              className="flex h-10 w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition hover:border-slate-300"
+            {error && (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
+            <Button
+              type="submit"
+              className="w-full h-12 bg-gradient-primary hover:opacity-90 transition-opacity"
+              disabled={!email.trim() || isPending}
             >
-              <span className="text-base">{icon}</span>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {feedback && (
-          <div
-            className={cn(
-              "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-                : "border-rose-100 bg-rose-50 text-rose-600"
-            )}
-          >
-            {feedback.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <AlertCircle className="h-4 w-4" />
-            )}
-            <p className="flex-1 leading-relaxed">{feedback.message}</p>
-          </div>
+              {isPending ? "Enviando..." : "Enviar Link Mágico"}
+            </Button>
+          </form>
         )}
-      </CardContent>
-
-      <CardFooter className="flex flex-col gap-6 rounded-b-[28px] border-t border-slate-100 bg-slate-50 px-8 py-6 text-center text-sm text-slate-500">
-        <p>
-          Don’t have an account yet?{" "}
-          <button
-            type="button"
-            className="font-semibold text-slate-800 hover:text-slate-900"
-            onClick={() => setMode(mode === "login" ? "register" : "login")}
-          >
-            {mode === "login" ? "Sign up" : "Log in"}
-          </button>
+        <p className="text-sm text-muted-foreground text-center">
+          Enviaremos um link de acesso seguro para seu email
         </p>
-        <p className="text-xs text-slate-400">Smart Bell OS · Residents portal</p>
-      </CardFooter>
+      </CardContent>
     </Card>
   );
 }

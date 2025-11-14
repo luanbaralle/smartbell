@@ -21,6 +21,7 @@ import { AudioRecorder } from "@/components/AudioRecorder";
 import { AudioCall } from "@/components/AudioCall";
 import { VideoCall } from "@/components/VideoCall";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Bell, Phone, Video, MessageSquare } from "lucide-react";
 import { useAudioCall } from "@/hooks/useAudioCall";
 import { useVideoCall } from "@/hooks/useVideoCall";
 import type { Call, CallType, House, Message } from "@/types";
@@ -359,158 +360,219 @@ export function CallClient({
   }, [ensureCall]);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{house.name}</CardTitle>
-          <CardDescription>
-            Você está prestes a chamar o morador desta residência.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {currentCall && (
-            <div className="flex items-center gap-2 text-sm text-slate-300">
-              <span>Status da chamada:</span>
-              <StatusBadge status={currentCall.status} />
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl space-y-6 animate-fade-in">
+        {/* Header Card */}
+        <Card className="shadow-lg overflow-hidden">
+          <div className="h-2 bg-gradient-primary" />
+          <CardHeader className="text-center space-y-4 bg-gradient-card">
+            <div className="mx-auto h-20 w-20 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow animate-pulse-glow">
+              <Bell className="h-10 w-10 text-primary-foreground" />
             </div>
-          )}
-
-          {statusMessage && (
-            <p className="text-sm text-slate-400">{statusMessage}</p>
-          )}
-
-          <div className="grid gap-3 md:grid-cols-2">
-        <Button
-          className="w-full"
-          variant="outline"
-          onClick={() => messageInputRef.current?.focus()}
-        >
-          Enviar mensagem
-        </Button>
-        <Button
-          className="w-full"
-          variant="outline"
-          onClick={() =>
-            audioSectionRef.current?.scrollIntoView({ behavior: "smooth" })
-          }
-        >
-          Enviar áudio
-        </Button>
-            <Button
-              className="w-full"
-              onClick={() =>
-                startCalling(async () => {
-                  await ensureCall("audio");
-                })
-              }
-              disabled={isCalling}
-            >
-              Chamar morador
-            </Button>
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={handleRequestVoiceCall}
-              disabled={isCalling}
-            >
-              Iniciar chamada de voz
-            </Button>
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={handleRequestVideoCall}
-              disabled={isCalling}
-            >
-              Vídeo chamada
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {showAudioPanel && currentCall && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Chamada de voz</CardTitle>
-            <CardDescription>
-              {audioState === "calling"
-                ? "Chamando morador..."
-                : audioState === "ringing"
-                  ? "Morador foi notificado. Aguarde."
-                  : audioState === "connected"
-                    ? "Chamada ativa."
-                    : "Sessão finalizada."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AudioCall
-              call={currentCall}
-              state={audioState}
-              remoteStream={audioRemoteStream}
-              onHangup={() => {
-                void hangupAudioCall();
-                setIntent("idle");
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {showVideoPanel && currentCall && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Vídeo chamada</CardTitle>
-            <CardDescription>
-              {videoState === "calling"
-                ? "Preparando chamada de vídeo..."
-                : videoState === "ringing"
-                  ? "Aguardando o morador aceitar."
-                  : videoState === "connected"
-                    ? "Conexão de vídeo ativa."
-                    : "Sessão finalizada."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <VideoCall
-              call={currentCall}
-              state={videoState}
-              localStream={videoLocalStream}
-              remoteStream={videoRemoteStream}
-              onHangup={() => {
-                void hangupVideoCall();
-                setIntent("idle");
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Mensagens</CardTitle>
-          <CardDescription>
-            Envie uma mensagem ou áudio para o morador.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ChatWindow
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            isSending={isSendingMessage}
-            textareaRef={messageInputRef}
-          />
-          <div
-            className={cn(
-              "rounded-md border border-slate-800 bg-slate-900/60 p-4"
+            <div>
+              <CardTitle className="text-2xl mb-2">Bem-vindo!</CardTitle>
+              <CardDescription className="text-base">
+                {house.name} • Escolha como deseja se comunicar com o morador
+              </CardDescription>
+            </div>
+            {currentCall && (
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <StatusBadge status={currentCall.status} />
+              </div>
             )}
-            ref={audioSectionRef}
-          >
-            <AudioRecorder
-              onSave={handleSendAudio}
-              disabled={isCalling || intent.startsWith("video")}
-            />
+            {statusMessage && (
+              <p className="text-sm text-muted-foreground">{statusMessage}</p>
+            )}
+          </CardHeader>
+        </Card>
+
+        {/* Action Buttons */}
+        {intent === "idle" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+            <Button
+              onClick={async () => {
+                setIntent("text");
+                await ensureCall("text");
+                setTimeout(() => messageInputRef.current?.focus(), 100);
+              }}
+              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
+              variant="outline"
+            >
+              <MessageSquare className="h-8 w-8 text-primary" />
+              <div className="text-center">
+                <p className="font-semibold">Chat</p>
+                <p className="text-xs text-muted-foreground">Mensagem de texto</p>
+              </div>
+            </Button>
+
+            <Button
+              onClick={handleRequestVoiceCall}
+              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
+              variant="outline"
+              disabled={isCalling}
+            >
+              <Phone className="h-8 w-8 text-primary" />
+              <div className="text-center">
+                <p className="font-semibold">Áudio</p>
+                <p className="text-xs text-muted-foreground">Chamada de voz</p>
+              </div>
+            </Button>
+
+            <Button
+              onClick={handleRequestVideoCall}
+              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
+              variant="outline"
+              disabled={isCalling}
+            >
+              <Video className="h-8 w-8 text-primary" />
+              <div className="text-center">
+                <p className="font-semibold">Vídeo</p>
+                <p className="text-xs text-muted-foreground">Chamada com vídeo</p>
+              </div>
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+
+        {/* Chat Window */}
+        {((intent === "text" || (currentCall && currentCall.type === "text")) && !showAudioPanel && !showVideoPanel) && (
+          <div className="space-y-4 animate-fade-in">
+            <ChatWindow
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              isSending={isSendingMessage}
+              textareaRef={messageInputRef}
+            />
+            <Button
+              onClick={() => setIntent("idle")}
+              variant="outline"
+              className="w-full"
+            >
+              Voltar
+            </Button>
+          </div>
+        )}
+
+        {/* Audio Call */}
+        {showAudioPanel && currentCall && (
+          <Card className="shadow-lg animate-fade-in">
+            <CardHeader className="bg-gradient-card">
+              <CardTitle>Chamada de Áudio</CardTitle>
+              <CardDescription>
+                {audioState === "calling"
+                  ? "Chamando morador..."
+                  : audioState === "ringing"
+                    ? "Morador foi notificado. Aguarde."
+                    : audioState === "connected"
+                      ? "Chamada ativa."
+                      : "Sessão finalizada."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="py-12 text-center space-y-6">
+              <div className="mx-auto h-24 w-24 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse-glow">
+                <Phone className="h-12 w-12 text-primary-foreground" />
+              </div>
+              <AudioCall
+                call={currentCall}
+                state={audioState}
+                remoteStream={audioRemoteStream}
+                onHangup={() => {
+                  void hangupAudioCall();
+                  setIntent("idle");
+                }}
+              />
+              <Button
+                onClick={() => {
+                  void hangupAudioCall();
+                  setIntent("idle");
+                }}
+                variant="destructive"
+                className="w-full max-w-xs"
+              >
+                Encerrar Chamada
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Video Call */}
+        {showVideoPanel && currentCall && (
+          <Card className="shadow-lg animate-fade-in">
+            <CardHeader className="bg-gradient-card">
+              <CardTitle>Chamada de Vídeo</CardTitle>
+              <CardDescription>
+                {videoState === "calling"
+                  ? "Preparando chamada de vídeo..."
+                  : videoState === "ringing"
+                    ? "Aguardando o morador aceitar."
+                    : videoState === "connected"
+                      ? "Conexão de vídeo ativa."
+                      : "Sessão finalizada."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="py-12 text-center space-y-6">
+              <VideoCall
+                call={currentCall}
+                state={videoState}
+                localStream={videoLocalStream}
+                remoteStream={videoRemoteStream}
+                onHangup={() => {
+                  void hangupVideoCall();
+                  setIntent("idle");
+                }}
+              />
+              <Button
+                onClick={() => {
+                  void hangupVideoCall();
+                  setIntent("idle");
+                }}
+                variant="destructive"
+                className="w-full max-w-xs"
+              >
+                Encerrar Chamada
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Messages and Audio */}
+        {intent !== "audio-active" && intent !== "video-active" && (
+          <Card className="shadow-lg">
+            <CardHeader className="bg-gradient-card">
+              <CardTitle>Mensagens</CardTitle>
+              <CardDescription>
+                Envie uma mensagem ou áudio para o morador.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ChatWindow
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                isSending={isSendingMessage}
+                textareaRef={messageInputRef}
+              />
+              <div
+                className={cn("rounded-md border bg-card p-4")}
+                ref={audioSectionRef}
+              >
+                <AudioRecorder
+                  onSave={handleSendAudio}
+                  disabled={isCalling || intent.startsWith("video")}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Footer Info */}
+        <Card className="bg-muted/50 border-dashed">
+          <CardContent className="py-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Sistema Smart Bell • Aguarde a resposta do morador
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

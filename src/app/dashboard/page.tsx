@@ -204,14 +204,12 @@ export default async function DashboardPage({
   );
 
   return (
-    <main className="flex min-h-screen flex-col gap-6 bg-slate-950 p-6">
-      <DashboardClient
-        profile={profile}
-        houses={houses}
-        calls={allCalls}
-        messages={messageMap}
-      />
-    </main>
+    <DashboardClient
+      profile={profile}
+      houses={houses}
+      calls={allCalls}
+      messages={messageMap}
+    />
   );
 }
 
