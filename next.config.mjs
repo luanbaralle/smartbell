@@ -11,6 +11,15 @@ const nextConfig = {
   },
   typescript: {
     ignoreBuildErrors: false
+  },
+  // Excluir pasta UI do build
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
+  webpack: (config) => {
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: ['**/UI/**', '**/node_modules/**']
+    };
+    return config;
   }
 };
 
