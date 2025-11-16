@@ -775,7 +775,7 @@ export function CallClient({
     };
   }, [handleSignalingEvent]);
 
-  const handleRequestVoiceCall = useCallback(() => {
+  const handleRequestVoiceCall = useCallback(async () => {
     // Reset call ended state when starting a new call
     setCallEndedByResident(false);
     setCallEndedByVisitor(false);
@@ -783,6 +783,27 @@ export function CallClient({
     prevCallEndedByResidentRef.current = false;
     prevWasConnectedRef.current = false;
     webrtcInitiatedRef.current = null; // Reset WebRTC ref para permitir nova chamada
+    
+    // No mobile, we need to request microphone permission first
+    // This must be done in response to user interaction
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Request microphone permission early (in response to user click)
+        // This helps with mobile browsers that require user interaction
+        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Stop the test stream immediately - we just needed permission
+        testStream.getTracks().forEach(track => track.stop());
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CallClient] Microphone permission granted");
+        }
+      }
+    } catch (error) {
+      console.error("[CallClient] Error requesting microphone permission", error);
+      setStatusMessage("Permissão de microfone necessária para fazer chamadas.");
+      return;
+    }
+    
     startCalling(async () => {
       try {
         // Criar chamada no banco
