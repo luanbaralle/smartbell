@@ -68,16 +68,10 @@ export function DashboardClient({
 }: DashboardClientProps) {
   // Profile já foi validado no page.tsx antes de renderizar este componente
   // Não precisamos validar novamente aqui para evitar problemas de hidratação
+  // Mas garantimos que profile.id existe para evitar erros de runtime
   
-  // Verificação de segurança adicional
-  if (!profile || !profile.id) {
-    console.error("[DashboardClient] Profile is missing or invalid:", profile);
-    return (
-      <div className="p-4">
-        <p className="text-red-500">Erro: Perfil não encontrado. Por favor, faça login novamente.</p>
-      </div>
-    );
-  }
+  // Garantir que profile.id existe antes de usar hooks
+  const userId = profile?.id || "temp-user-id";
   
   const houseLookup = useMemo(() => {
     const map = new Map<string, House>();
@@ -151,9 +145,8 @@ export function DashboardClient({
   }, [callMap]);
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
-  // Garantir que profile.id existe antes de usar - se não existir, não inicializar o hook
   const callState = useCallState({
-    userId: profile?.id || "temp-user-id",
+    userId: userId,
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
@@ -240,12 +233,12 @@ export function DashboardClient({
     // Detectar quando visitante encerra a chamada
     // Verificar se foi o visitante que encerrou (from !== profile.id)
     if (event.type === "call.hangup") {
-      const isFromResident = event.from === profile?.id;
+      const isFromResident = event.from === userId;
       
       if (process.env.NODE_ENV === "development") {
         console.log(`[DashboardClient] Processing call.hangup event`, {
           from: event.from,
-          profileId: profile?.id || "",
+          profileId: userId,
           isFromResident,
           callEndedByResident,
           callEndedByVisitor
@@ -329,14 +322,14 @@ export function DashboardClient({
               type: "call.request",
               callId: call.id,
               from: call.session_id || "visitor",
-              to: profile?.id || "",
+              to: userId,
               timestamp: Date.now()
             });
           }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
-  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile?.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, userId, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -391,10 +384,10 @@ export function DashboardClient({
   const prevVideoStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
 
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!userId || userId === "temp-user-id") return;
     
     const { supabase, channel } = createRealtimeChannel(
-      `dashboard-calls:${profile.id}`
+      `dashboard-calls:${userId}`
     );
 
     // Subscribe to all calls for houses owned by this user
@@ -611,7 +604,7 @@ export function DashboardClient({
         setIsSending(false);
       }
     },
-    [profile?.id, selectedCallId]
+    [userId, selectedCallId]
   );
 
   const handleQuickReply = useCallback(
@@ -651,7 +644,7 @@ export function DashboardClient({
         })
       });
     },
-    [callMap, profile?.id, selectedCallId]
+    [callMap, userId, selectedCallId]
   );
 
   const handleUpdateStatus = useCallback(
@@ -798,7 +791,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.accept(callToAccept, profile?.id || "", call.session_id || "visitor")
+          createSignalingEvent.accept(callToAccept, userId, call.session_id || "visitor")
         );
       }
       
@@ -811,7 +804,7 @@ export function DashboardClient({
       console.error("[SmartBell] Error accepting call", error);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile?.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, userId, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
     const callToReject = activeIncomingCall?.id || selectedCallId;
@@ -824,7 +817,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.reject(callToReject, profile?.id || "", call.session_id || "visitor", "user_reject")
+          createSignalingEvent.reject(callToReject, userId, call.session_id || "visitor", "user_reject")
         );
       }
       
@@ -841,7 +834,7 @@ export function DashboardClient({
     } catch (error) {
       console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [activeIncomingCall, selectedCallId, callState, profile?.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, callState, userId, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -913,7 +906,7 @@ export function DashboardClient({
               if (channel && call) {
                 await sendSignalingEvent(
                   channel.channel,
-                  createSignalingEvent.hangup(selectedCallId, profile?.id || "", call.session_id || "visitor", "user_end")
+                  createSignalingEvent.hangup(selectedCallId, userId, call.session_id || "visitor", "user_end")
                 );
               }
               
