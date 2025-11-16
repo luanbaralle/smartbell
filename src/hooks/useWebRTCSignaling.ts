@@ -30,7 +30,16 @@ export function useWebRTCSignaling(
   const supabaseRef = useRef<ReturnType<typeof createRealtimeChannel>["supabase"] | null>(null);
 
   useEffect(() => {
-    if (!callId) return;
+    if (!callId) {
+      channelRef.current = null;
+      supabaseRef.current = null;
+      return;
+    }
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("[useWebRTCSignaling] Setting up channel", { callId });
+    }
+    
     const { supabase, channel } = createRealtimeChannel(`webrtc:${callId}`);
     supabaseRef.current = supabase;
     channelRef.current = channel;
@@ -44,6 +53,10 @@ export function useWebRTCSignaling(
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR") {
           console.error("[SmartBell] erro no canal de sinalização");
+        } else if (status === "SUBSCRIBED") {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useWebRTCSignaling] Channel subscribed successfully", { callId });
+          }
         }
       });
 

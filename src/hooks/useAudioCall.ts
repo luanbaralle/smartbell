@@ -230,7 +230,16 @@ export function useAudioCall(
       }
       
       if (process.env.NODE_ENV === "development") {
-        console.log("[useAudioCall] initiateCall starting", { targetCallId, role });
+        console.log("[useAudioCall] initiateCall starting", { targetCallId, role, currentCallId: callId });
+      }
+      
+      // IMPORTANTE: Se o callId mudou, aguardar um pouco para garantir que o canal está subscrito
+      if (targetCallId !== callId) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[useAudioCall] callId mismatch, waiting for channel subscription", { targetCallId, currentCallId: callId });
+        }
+        // Aguardar um pouco para o useWebRTCSignaling se inscrever no novo canal
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
       
       setConnectionState("calling");
@@ -242,6 +251,12 @@ export function useAudioCall(
       
       if (process.env.NODE_ENV === "development") {
         console.log("[useAudioCall] Sending offer", { targetCallId, role, hasSendSignal: !!sendSignal });
+      }
+      
+      // Verificar se sendSignal está disponível antes de enviar
+      if (!sendSignal) {
+        console.error("[useAudioCall] sendSignal not available!", { targetCallId, role });
+        throw new Error("sendSignal not available");
       }
       
       await sendSignal(payload);
