@@ -137,6 +137,10 @@ export function CallClient({
   const dialToneCallIdRef = useRef<string | null>(null);
   // Ref separado para rastrear se WebRTC foi iniciado
   const webrtcInitiatedRef = useRef<string | null>(null);
+  // Ref para rastrear valores anteriores e evitar loops
+  const prevCallEndedByResidentRef = useRef(false);
+  const prevWasConnectedRef = useRef(false);
+  const prevAudioStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
   
   const stopDialToneSafely = useCallback(() => {
     if (stopDialTone) {
@@ -321,13 +325,16 @@ export function CallClient({
       const localCall = callState.getCall(callId);
       if (localCall && localCall.state === "in_call") {
         // Chamada foi aceita - parar dial tone e atualizar UI
-        stopDialToneSafely();
-        setWasConnected(true);
-        setCallEndedByResident(false);
-        setIntent("audio-active");
+        // NÃO resetar callEndedByResident se já está true (chamada foi encerrada)
+        if (!callEndedByResident) {
+          stopDialToneSafely();
+          setWasConnected(true);
+          setCallEndedByResident(false);
+          setIntent("audio-active");
+        }
       }
     }
-  }, [callId, callState, stopDialToneSafely]);
+  }, [callId, callState, callEndedByResident, stopDialToneSafely]);
 
   // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
   useEffect(() => {
@@ -336,16 +343,26 @@ export function CallClient({
       if (localCall && localCall.state !== "in_call") {
         callState.updateCallState(callId, "in_call");
       }
-      setWasConnected(true);
-      setCallEndedByResident(false); // Reset when new call connects
-      stopDialToneSafely();
+      // NÃO resetar callEndedByResident se já está true (chamada foi encerrada)
+      if (!callEndedByResident) {
+        setWasConnected(true);
+        setCallEndedByResident(false); // Reset when new call connects
+        stopDialToneSafely();
+      }
     }
-  }, [callId, audioState, videoState, callState, stopDialToneSafely]);
+  }, [callId, audioState, videoState, callState, callEndedByResident, stopDialToneSafely]);
 
   // Reset intent when calls end - detect when resident ends call
   useEffect(() => {
+    // Atualizar refs
+    const prevWasConnected = prevWasConnectedRef.current;
+    const prevAudioState = prevAudioStateRef.current;
+    prevWasConnectedRef.current = wasConnected;
+    prevAudioStateRef.current = audioState;
+    
     // Check if call was connected and now is idle (ended by resident)
-    if (wasConnected && audioState === "idle") {
+    // Só executar se houve mudança de estado (connected -> idle)
+    if (prevWasConnected && prevAudioState === "connected" && audioState === "idle") {
       // Stop dial tone IMMEDIATELY - this is critical and must happen first
       if (dialToneCallIdRef.current) {
         if (process.env.NODE_ENV === "development") {
@@ -355,18 +372,18 @@ export function CallClient({
         dialToneCallIdRef.current = null;
       }
       
-      // Set callEndedByResident immediately to prevent any dial tone restart
-      if (intent === "audio-active" || intent === "audio") {
+      // Set callEndedByResident apenas uma vez - verificar se já não está true
+      if (!callEndedByResident && (intent === "audio-active" || intent === "audio")) {
         setCallEndedByResident(true);
         setStatusMessage("Chamada encerrada pelo morador.");
         setIntent("idle");
         // Don't reset wasConnected immediately - let the card show
       }
-    } else if (intent === "audio-active" && audioState === "idle" && !wasConnected) {
+    } else if (intent === "audio-active" && audioState === "idle" && !wasConnected && !callEndedByResident) {
       // Call ended but wasn't connected (maybe error or visitor ended)
       setIntent("idle");
     }
-  }, [audioState, intent, wasConnected, stopDialToneSafely]);
+  }, [audioState, intent, wasConnected, callEndedByResident, stopDialToneSafely]);
 
   useEffect(() => {
     if (intent === "video-active" && videoState === "idle") {
