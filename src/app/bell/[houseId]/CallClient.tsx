@@ -21,12 +21,13 @@ import { AudioRecorder } from "@/components/AudioRecorder";
 import { AudioCall } from "@/components/AudioCall";
 import { VideoCall } from "@/components/VideoCall";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Bell, Phone, Video, MessageSquare } from "lucide-react";
+import { Bell, Phone, Video, MessageSquare, PhoneOff, Clock } from "lucide-react";
 import { useAudioCall } from "@/hooks/useAudioCall";
 import { useVideoCall } from "@/hooks/useVideoCall";
+import { useCallSounds } from "@/hooks/useCallSounds";
 import type { Call, CallType, House, Message } from "@/types";
 import { createRealtimeChannel } from "@/lib/realtime";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 type CallClientProps = {
   house: House;
@@ -48,17 +49,19 @@ export function CallClient({
   initialMessages
 }: CallClientProps) {
   const [currentCall, setCurrentCall] = useState<Call | null>(initialCall);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isCalling, startCalling] = useTransition();
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [intent, setIntent] = useState<CallIntent>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [wasConnected, setWasConnected] = useState(false); // Track if call was connected
+  const [callEndedByResident, setCallEndedByResident] = useState(false); // Track if call was ended by resident
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const audioSectionRef = useRef<HTMLDivElement | null>(null);
 
   const callId = currentCall?.id ?? null;
   const audioCall = useAudioCall(callId, "visitor");
   const videoCall = useVideoCall(callId, "visitor");
+  const { playDialTone, stopDialTone } = useCallSounds();
   const {
     connectionState: audioState,
     initiateCall: initiateAudioCall,
@@ -73,6 +76,7 @@ export function CallClient({
     localStream: videoLocalStream
   } = videoCall;
 
+  // Update status message based on call state
   useEffect(() => {
     if (!currentCall) {
       setStatusMessage(null);
@@ -80,56 +84,299 @@ export function CallClient({
       return;
     }
 
-    if (currentCall.status === "pending") {
-      setStatusMessage("Aguardando resposta do morador...");
-    } else if (currentCall.status === "answered") {
-      setStatusMessage("Morador atendeu. Comunicação ativa.");
-    } else if (currentCall.status === "missed") {
-      setStatusMessage("Morador não disponível no momento.");
-      setIntent("idle");
+    try {
+      if (currentCall.status === "pending") {
+        setStatusMessage("Aguardando resposta do morador...");
+      } else if (currentCall.status === "answered") {
+        setStatusMessage("Morador atendeu. Comunicação ativa.");
+      } else if (currentCall.status === "missed") {
+        setStatusMessage("Morador não disponível no momento.");
+        // Only reset intent if we're not in an active call
+        setIntent((prevIntent) => {
+          if (prevIntent === "audio-active" || prevIntent === "video-active") {
+            return prevIntent; // Keep active call state
+          }
+          return "idle";
+        });
+      } else if (currentCall.status === "ended") {
+        setStatusMessage("Chamada encerrada.");
+        setIntent("idle");
+      }
+    } catch (error) {
+      // Silenciosamente ignorar erros de atualização de status
     }
   }, [currentCall]);
 
-  useEffect(() => {
-    if (intent === "audio" && currentCall?.id) {
-      (async () => {
-        await initiateAudioCall(currentCall.id);
-        setIntent("audio-active");
-      })();
+  // Ref para rastrear se o dial tone já foi iniciado para esta chamada
+  const dialToneCallIdRef = useRef<string | null>(null);
+  const stopDialToneSafely = useCallback(() => {
+    if (stopDialTone) {
+      stopDialTone();
     }
-  }, [intent, currentCall?.id, initiateAudioCall]);
+    dialToneCallIdRef.current = null;
+  }, [stopDialTone]);
 
+  // Handle audio call initiation
   useEffect(() => {
-    if (intent === "video" && currentCall?.id) {
-      (async () => {
-        await initiateVideoCall(currentCall.id);
-        setIntent("video-active");
-      })();
+    // Only proceed if intent is audio and we have a call ID
+    if (intent !== "audio" || !currentCall?.id) {
+      // Se não estamos mais em modo audio, limpar o ref
+      if (intent !== "audio") {
+        dialToneCallIdRef.current = null;
+      }
+      return;
     }
+
+    // Don't initiate call if it was ended by resident
+    if (callEndedByResident) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Call was ended by resident, not initiating new call");
+      }
+      setIntent("idle");
+      // Force stop dial tone if somehow it's still playing
+      stopDialToneSafely();
+      dialToneCallIdRef.current = null;
+      return;
+    }
+    
+    // Also prevent initiating if call was connected and is now idle (resident ended)
+    if (wasConnected && audioState === "idle") {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Call was ended by resident (wasConnected + idle), not initiating");
+      }
+      setIntent("idle");
+      stopDialToneSafely();
+      dialToneCallIdRef.current = null;
+      return;
+    }
+
+    const callId = currentCall.id;
+    if (!callId) {
+      return;
+    }
+
+    // Se já iniciamos o dial tone para esta chamada, não reiniciar
+    if (dialToneCallIdRef.current === callId) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Dial tone already started for this call, skipping");
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let dialToneStarted = false;
+    
+    // Marcar que iniciamos o dial tone para esta chamada
+    dialToneCallIdRef.current = callId;
+    
+    // Tocar tom de chamada quando iniciar chamada de áudio
+    // IMPORTANTE: Tocar ANTES de iniciar a chamada para garantir que comece imediatamente
+    if (playDialTone && typeof playDialTone === "function") {
+      try {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[SmartBell] Starting dial tone for call", callId);
+        }
+        playDialTone();
+        dialToneStarted = true;
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[SmartBell] Error starting dial tone", err);
+        }
+      }
+    }
+    
+    (async () => {
+      try {
+        await initiateAudioCall(callId);
+        if (!cancelled) {
+          setIntent("audio-active");
+        }
+      } catch (error) {
+        // Parar dial tone apenas em caso de erro
+        if (dialToneStarted) {
+          try {
+            stopDialToneSafely();
+          } catch {
+            // Ignore errors
+          }
+        }
+        if (!cancelled) {
+          setIntent("idle");
+        }
+      }
+    })();
+    
+    return () => {
+      cancelled = true;
+      // NÃO parar dial tone aqui - deixar o useEffect de audioState cuidar disso
+    };
+  }, [intent, currentCall?.id, initiateAudioCall, playDialTone, stopDialTone, callEndedByResident, wasConnected, audioState]);
+
+  // Handle video call initiation
+  useEffect(() => {
+    if (intent !== "video" || !currentCall?.id) {
+      return;
+    }
+
+    const callId = currentCall.id;
+    if (!callId) {
+      return;
+    }
+
+    let cancelled = false;
+    
+    (async () => {
+      try {
+        await initiateVideoCall(callId);
+        if (!cancelled) {
+          setIntent("video-active");
+        }
+      } catch (error) {
+        // Silenciosamente tratar erros de vídeo
+        if (!cancelled) {
+          setIntent("idle");
+        }
+      }
+    })();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [intent, currentCall?.id, initiateVideoCall]);
 
+  // Stop dial tone when call is connected or when receiving answer (resident accepted)
   useEffect(() => {
-    if (intent === "audio-active" && audioState === "idle") {
+    // Stop dial tone immediately when connected
+    if (audioState === "connected") {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Call connected, stopping dial tone");
+      }
+      stopDialToneSafely();
+    }
+    // Also stop when ringing (resident is answering) to prevent dial tone continuing
+    if (audioState === "ringing") {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Call ringing (resident answering), stopping dial tone");
+      }
+      stopDialToneSafely();
+    }
+    // Stop dial tone when remote stream is received (resident accepted the call)
+    // This happens before audioState changes to "connected" in some cases
+    if (audioRemoteStream) {
+      if (dialToneCallIdRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[SmartBell] Remote stream received (resident accepted), stopping dial tone");
+        }
+        stopDialToneSafely();
+      }
+    }
+  }, [audioState, audioRemoteStream, stopDialToneSafely]);
+
+  // Stop dial tone immediately when call ends (especially when ended by resident)
+  useEffect(() => {
+    // CRITICAL: Stop dial tone FIRST if callEndedByResident is true (resident ended the call)
+    // This must be checked FIRST to ensure immediate stop and prevent any restart
+    if (callEndedByResident) {
+      if (dialToneCallIdRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[SmartBell] Call ended by resident, forcing dial tone stop");
+        }
+        stopDialToneSafely();
+        dialToneCallIdRef.current = null;
+      }
+      return; // Don't check other conditions if call was ended by resident
+    }
+    
+    // If call was connected and now is idle, it was ended - stop dial tone immediately
+    // This handles the case where wasConnected is true but callEndedByResident hasn't been set yet
+    if (wasConnected && audioState === "idle") {
+      if (dialToneCallIdRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[SmartBell] Call ended (was connected), stopping dial tone immediately");
+        }
+        stopDialToneSafely();
+        dialToneCallIdRef.current = null;
+      }
+    }
+    
+    // Also stop if audio is idle and we're not in audio mode
+    if (
+      audioState === "idle" &&
+      dialToneCallIdRef.current &&
+      intent !== "audio" &&
+      intent !== "audio-active"
+    ) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Audio idle and intent not audio, stopping dial tone");
+      }
+      stopDialToneSafely();
+      dialToneCallIdRef.current = null;
+    }
+  }, [audioState, intent, wasConnected, callEndedByResident, stopDialToneSafely]);
+
+  // Track when call was connected
+  useEffect(() => {
+    if (audioState === "connected" || videoState === "connected") {
+      setWasConnected(true);
+      setCallEndedByResident(false); // Reset when new call connects
+    }
+  }, [audioState, videoState]);
+
+  // Reset intent when calls end - detect when resident ends call
+  useEffect(() => {
+    // Check if call was connected and now is idle (ended by resident)
+    if (wasConnected && audioState === "idle") {
+      // Stop dial tone IMMEDIATELY - this is critical and must happen first
+      if (dialToneCallIdRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[SmartBell] Call ended by resident - stopping dial tone immediately");
+        }
+        stopDialToneSafely();
+        dialToneCallIdRef.current = null;
+      }
+      
+      // Set callEndedByResident immediately to prevent any dial tone restart
+      if (intent === "audio-active" || intent === "audio") {
+        setCallEndedByResident(true);
+        setStatusMessage("Chamada encerrada pelo morador.");
+        setIntent("idle");
+        // Don't reset wasConnected immediately - let the card show
+      }
+    } else if (intent === "audio-active" && audioState === "idle" && !wasConnected) {
+      // Call ended but wasn't connected (maybe error or visitor ended)
       setIntent("idle");
     }
-  }, [audioState, intent]);
+  }, [audioState, intent, wasConnected, stopDialToneSafely]);
 
   useEffect(() => {
     if (intent === "video-active" && videoState === "idle") {
-      setIntent("idle");
+      // If call was connected and now is idle, it was ended by resident
+      if (wasConnected) {
+        setCallEndedByResident(true);
+        setStatusMessage("Chamada encerrada pelo morador.");
+        setIntent("idle");
+        // Don't reset wasConnected immediately - let the card show
+      } else {
+        // Call ended but wasn't connected (maybe error or visitor ended)
+        setIntent("idle");
+      }
     }
-  }, [intent, videoState]);
+  }, [intent, videoState, wasConnected]);
 
+  // Update status based on connection state
   useEffect(() => {
     if (audioState === "connected" || videoState === "connected") {
       setStatusMessage("Chamada conectada.");
-    } else if (audioState === "idle" && videoState === "idle" && intent === "idle") {
-      setStatusMessage("Chamada encerrada.");
+    } else if (audioState === "idle" && videoState === "idle" && intent === "idle" && currentCall && !wasConnected) {
+      if (currentCall.status === "answered") {
+        setStatusMessage("Chamada em andamento.");
+      }
     }
-  }, [audioState, intent, videoState]);
+  }, [audioState, intent, videoState, currentCall, wasConnected]);
 
+  // Listen to call updates
   useEffect(() => {
-    const { supabase, channel } = createRealtimeChannel(`calls:${house.id}`);
+    const { supabase, channel } = createRealtimeChannel(`call-${house.id}`);
 
     channel
       .on(
@@ -141,26 +388,38 @@ export function CallClient({
           filter: `house_id=eq.${house.id}`
         },
         (payload) => {
-          if (!payload.new) return;
-          const data = payload.new as Call;
-          setCurrentCall(data);
+          try {
+            if (payload.new) {
+              const data = payload.new as Call;
+              // Validate call data before updating
+              if (data && data.id && data.house_id === house.id) {
+                setCurrentCall(data);
+              }
+            }
+          } catch (error) {
+            // Silenciosamente ignorar erros de realtime
+          }
         }
-      );
-
-    channel.subscribe((status) => {
-      if (status === "CHANNEL_ERROR") {
-        console.error("[SmartBell] call realtime subscribe error");
-      }
-    });
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [house.id]);
 
+  // Clear messages when callId changes
   useEffect(() => {
-    if (!callId) return;
-    const { supabase, channel } = createRealtimeChannel(`messages:${callId}`);
+    setMessages([]);
+  }, [callId]);
+
+  // Listen to messages - ONLY for the current call
+  useEffect(() => {
+    if (!callId) {
+      return;
+    }
+    
+    const { supabase, channel } = createRealtimeChannel(`call-${callId}-messages`);
 
     channel
       .on(
@@ -173,29 +432,32 @@ export function CallClient({
         },
         (payload) => {
           const data = payload.new as Message;
+          // Double check that the message belongs to the current call
+          if (data.call_id !== callId) {
+            // Mensagem pertence a outra chamada, ignorar silenciosamente
+            return;
+          }
           setMessages((prev) => {
-            const exists = prev.some((item) => item.id === data.id);
-            if (exists) return prev;
-            return [...prev, data].sort(
+            // Ensure all messages belong to current call
+            const filtered = prev.filter(m => m.call_id === callId);
+            const exists = filtered.some((item) => item.id === data.id);
+            if (exists) return filtered;
+            return [...filtered, data].sort(
               (a, b) =>
                 new Date(a.created_at).getTime() -
                 new Date(b.created_at).getTime()
             );
           });
         }
-      );
-
-    channel.subscribe((status) => {
-      if (status === "CHANNEL_ERROR") {
-        console.error("[SmartBell] message realtime subscribe error");
-      }
-    });
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [callId]);
 
+  // Load messages when call changes - ensure we only load messages for current call
   useEffect(() => {
     if (!callId) {
       setMessages([]);
@@ -213,40 +475,22 @@ export function CallClient({
         return response.json();
       })
       .then((data) => {
-        setMessages(data.messages ?? []);
+        // Filter messages to ensure they all belong to the current call
+        const messages = (data.messages ?? []).filter((msg: Message) => msg.call_id === callId);
+        setMessages(messages);
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
-          console.error("[SmartBell] não foi possível carregar mensagens", error);
+          // Silenciosamente ignorar erros de carregamento de mensagens
         }
       });
 
     return () => controller.abort();
   }, [callId]);
 
-  const hasActiveCall = useMemo(() => {
-    if (!currentCall) return false;
-    return (
-      currentCall.status === "pending" || currentCall.status === "answered"
-    );
-  }, [currentCall]);
-  const showAudioPanel =
-    !!currentCall &&
-    (intent === "audio-active" ||
-      audioState === "calling" ||
-      audioState === "ringing" ||
-      audioState === "connected");
-  const showVideoPanel =
-    !!currentCall &&
-    (intent === "video-active" ||
-      videoState === "calling" ||
-      videoState === "ringing" ||
-      videoState === "connected");
-
   const ensureCall = useCallback(
     async (type: CallType) => {
-      setIntent(type);
-      if (hasActiveCall && currentCall) {
+      if (currentCall && (currentCall.status === "pending" || currentCall.status === "answered")) {
         return currentCall;
       }
 
@@ -268,22 +512,23 @@ export function CallClient({
         }
 
         const data = await response.json();
-        setCurrentCall(data.call);
+        const newCall = data.call as Call;
+        // Clear all messages and set new call
         setMessages([]);
+        setCurrentCall(newCall);
         setStatusMessage("Morador foi chamado. Aguardando resposta...");
-        return data.call as Call;
+        return newCall;
       } catch (error) {
-        console.error(error);
         setStatusMessage("Falha ao iniciar a chamada.");
         throw error;
       }
     },
-    [currentCall, hasActiveCall, house.id]
+    [currentCall, house.id]
   );
 
   const handleSendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim()) return;
+      if (!content.trim() || isSendingMessage) return;
       setIsSendingMessage(true);
 
       try {
@@ -300,15 +545,13 @@ export function CallClient({
         if (!response.ok) {
           throw new Error("message error");
         }
-        setStatusMessage("Mensagem enviada.");
-      } catch (error) {
-        console.error(error);
-        setStatusMessage("Não foi possível enviar a mensagem.");
-      } finally {
+          } catch (error) {
+            setStatusMessage("Não foi possível enviar a mensagem.");
+          } finally {
         setIsSendingMessage(false);
       }
     },
-    [ensureCall]
+    [ensureCall, isSendingMessage]
   );
 
   const handleSendAudio = useCallback(
@@ -338,68 +581,102 @@ export function CallClient({
             audioUrl: url
           })
         });
-        setStatusMessage("Mensagem de áudio enviada.");
-      } catch (error) {
-        console.error(error);
-        setStatusMessage("Não foi possível enviar o áudio.");
-      }
+          } catch (error) {
+            setStatusMessage("Não foi possível enviar o áudio.");
+          }
     },
     [ensureCall, house.id]
   );
 
   const handleRequestVoiceCall = useCallback(() => {
+    // Reset call ended state when starting a new call
+    setCallEndedByResident(false);
+    setWasConnected(false);
     startCalling(async () => {
-      await ensureCall("audio");
+      const call = await ensureCall("audio");
+      setIntent("audio");
     });
   }, [ensureCall]);
 
   const handleRequestVideoCall = useCallback(() => {
     startCalling(async () => {
-      await ensureCall("video");
+      const call = await ensureCall("video");
+      setIntent("video");
     });
   }, [ensureCall]);
 
+  // Filter messages to ensure they only belong to current call
+  const filteredMessages = useMemo(() => {
+    if (!callId) return [];
+    return messages.filter(msg => msg.call_id === callId);
+  }, [messages, callId]);
+
+  const showChat = intent === "text" || (currentCall && currentCall.type === "text" && intent !== "audio-active" && intent !== "video-active");
+  // Don't show audio call UI if call was ended by resident
+  const showAudioCall = (intent === "audio-active" || audioState !== "idle") && !callEndedByResident;
+  const showVideoCall = (intent === "video-active" || videoState !== "idle") && !callEndedByResident;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl space-y-6 animate-fade-in">
-        {/* Header Card */}
-        <Card className="shadow-lg overflow-hidden">
-          <div className="h-2 bg-gradient-primary" />
-          <CardHeader className="text-center space-y-4 bg-gradient-card">
-            <div className="mx-auto h-20 w-20 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow animate-pulse-glow">
-              <Bell className="h-10 w-10 text-primary-foreground" />
-            </div>
-            <div>
-              <CardTitle className="text-2xl mb-2">Bem-vindo!</CardTitle>
-              <CardDescription className="text-base">
-                {house.name} • Escolha como deseja se comunicar com o morador
-              </CardDescription>
-            </div>
-            {currentCall && (
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-sm text-muted-foreground">Status:</span>
-                <StatusBadge status={currentCall.status} />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
+      <div className="mx-auto max-w-4xl space-y-4">
+        {/* Header */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
+          <CardHeader>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
+                <Bell className="h-8 w-8" />
               </div>
-            )}
-            {statusMessage && (
-              <p className="text-sm text-muted-foreground">{statusMessage}</p>
-            )}
+              <div>
+                <CardTitle className="text-xl text-slate-100">
+                  {house.name}
+                </CardTitle>
+                <CardDescription className="flex items-center justify-center gap-2 text-slate-400 mt-2">
+                  <Clock className="h-3 w-3" />
+                  {currentCall ? formatDate(currentCall.created_at) : "Nova chamada"}
+                </CardDescription>
+              </div>
+              {currentCall && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">Status:</span>
+                  <StatusBadge status={currentCall.status} />
+                </div>
+              )}
+              {statusMessage && (
+                <div className={cn(
+                  "w-full p-3 rounded-lg animate-in fade-in",
+                  statusMessage.includes("encerrada") 
+                    ? "bg-red-500/10 border border-red-500/30" 
+                    : "bg-slate-800/50"
+                )}>
+                  <p className={cn(
+                    "text-sm text-center",
+                    statusMessage.includes("encerrada")
+                      ? "text-red-400 font-semibold"
+                      : "text-slate-400"
+                  )}>
+                    {statusMessage}
+                  </p>
+                </div>
+              )}
+            </div>
           </CardHeader>
         </Card>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Only show when idle */}
         {intent === "idle" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Button
               onClick={async () => {
                 setIntent("text");
                 await ensureCall("text");
                 setTimeout(() => messageInputRef.current?.focus(), 100);
               }}
-              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
               variant="outline"
+              size="lg"
+              className="h-32 flex-col gap-3"
+              disabled={isCalling}
             >
-              <MessageSquare className="h-8 w-8 text-primary" />
+              <MessageSquare className="h-8 w-8" />
               <div className="text-center">
                 <p className="font-semibold">Chat</p>
                 <p className="text-xs text-muted-foreground">Mensagem de texto</p>
@@ -408,11 +685,12 @@ export function CallClient({
 
             <Button
               onClick={handleRequestVoiceCall}
-              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
               variant="outline"
+              size="lg"
+              className="h-32 flex-col gap-3"
               disabled={isCalling}
             >
-              <Phone className="h-8 w-8 text-primary" />
+              <Phone className="h-8 w-8" />
               <div className="text-center">
                 <p className="font-semibold">Áudio</p>
                 <p className="text-xs text-muted-foreground">Chamada de voz</p>
@@ -421,11 +699,12 @@ export function CallClient({
 
             <Button
               onClick={handleRequestVideoCall}
-              className="h-32 flex-col gap-3 bg-card hover:bg-accent/10 text-foreground border-2 border-primary/20 hover:border-primary/40 transition-all shadow-md hover:shadow-lg"
               variant="outline"
+              size="lg"
+              className="h-32 flex-col gap-3"
               disabled={isCalling}
             >
-              <Video className="h-8 w-8 text-primary" />
+              <Video className="h-8 w-8" />
               <div className="text-center">
                 <p className="font-semibold">Vídeo</p>
                 <p className="text-xs text-muted-foreground">Chamada com vídeo</p>
@@ -435,145 +714,140 @@ export function CallClient({
         )}
 
         {/* Chat Window */}
-        {((intent === "text" || (currentCall && currentCall.type === "text")) && !showAudioPanel && !showVideoPanel) && (
-          <div className="space-y-4 animate-fade-in">
-            <ChatWindow
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              isSending={isSendingMessage}
-              textareaRef={messageInputRef}
-            />
-            <Button
-              onClick={() => setIntent("idle")}
-              variant="outline"
-              className="w-full"
-            >
-              Voltar
-            </Button>
-          </div>
-        )}
-
-        {/* Audio Call */}
-        {showAudioPanel && currentCall && (
-          <Card className="shadow-lg animate-fade-in">
-            <CardHeader className="bg-gradient-card">
-              <CardTitle>Chamada de Áudio</CardTitle>
-              <CardDescription>
-                {audioState === "calling"
-                  ? "Chamando morador..."
-                  : audioState === "ringing"
-                    ? "Morador foi notificado. Aguarde."
-                    : audioState === "connected"
-                      ? "Chamada ativa."
-                      : "Sessão finalizada."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="py-12 text-center space-y-6">
-              <div className="mx-auto h-24 w-24 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse-glow">
-                <Phone className="h-12 w-12 text-primary-foreground" />
+        {showChat && (
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
+            <CardContent className="pt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-100">Chat</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIntent("idle")}
+                >
+                  Fechar
+                </Button>
               </div>
-              <AudioCall
-                call={currentCall}
-                state={audioState}
-                remoteStream={audioRemoteStream}
-                onHangup={() => {
-                  void hangupAudioCall();
-                  setIntent("idle");
-                }}
-              />
-              <Button
-                onClick={() => {
-                  void hangupAudioCall();
-                  setIntent("idle");
-                }}
-                variant="destructive"
-                className="w-full max-w-xs"
-              >
-                Encerrar Chamada
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Video Call */}
-        {showVideoPanel && currentCall && (
-          <Card className="shadow-lg animate-fade-in">
-            <CardHeader className="bg-gradient-card">
-              <CardTitle>Chamada de Vídeo</CardTitle>
-              <CardDescription>
-                {videoState === "calling"
-                  ? "Preparando chamada de vídeo..."
-                  : videoState === "ringing"
-                    ? "Aguardando o morador aceitar."
-                    : videoState === "connected"
-                      ? "Conexão de vídeo ativa."
-                      : "Sessão finalizada."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="py-12 text-center space-y-6">
-              <VideoCall
-                call={currentCall}
-                state={videoState}
-                localStream={videoLocalStream}
-                remoteStream={videoRemoteStream}
-                onHangup={() => {
-                  void hangupVideoCall();
-                  setIntent("idle");
-                }}
-              />
-              <Button
-                onClick={() => {
-                  void hangupVideoCall();
-                  setIntent("idle");
-                }}
-                variant="destructive"
-                className="w-full max-w-xs"
-              >
-                Encerrar Chamada
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Messages and Audio */}
-        {intent !== "audio-active" && intent !== "video-active" && (
-          <Card className="shadow-lg">
-            <CardHeader className="bg-gradient-card">
-              <CardTitle>Mensagens</CardTitle>
-              <CardDescription>
-                Envie uma mensagem ou áudio para o morador.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <ChatWindow
-                messages={messages}
+                messages={filteredMessages}
                 onSendMessage={handleSendMessage}
                 isSending={isSendingMessage}
                 textareaRef={messageInputRef}
               />
-              <div
-                className={cn("rounded-md border bg-card p-4")}
-                ref={audioSectionRef}
-              >
+              <div className="mt-4">
                 <AudioRecorder
                   onSave={handleSendAudio}
-                  disabled={isCalling || intent.startsWith("video")}
+                  disabled={isCalling || showAudioCall || showVideoCall}
                 />
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Footer Info */}
-        <Card className="bg-muted/50 border-dashed">
-          <CardContent className="py-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Sistema Smart Bell • Aguarde a resposta do morador
-            </p>
-          </CardContent>
-        </Card>
+        {/* Audio Call */}
+        {showAudioCall && currentCall && (
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
+            <CardContent className="pt-6">
+              <AudioCall
+                call={currentCall}
+                state={audioState}
+                onHangup={async () => {
+                  await hangupAudioCall();
+                  setIntent("idle");
+                  setWasConnected(false);
+                  setCallEndedByResident(false); // Visitor ended, not resident
+                  // Note: Status update is handled by resident when they detect hangup
+                  // or via Realtime when call status changes
+                }}
+                remoteStream={audioRemoteStream}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Call Ended Overlay - Show fullscreen when call was ended by resident */}
+        {callEndedByResident && (
+          <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-red-950/95 via-slate-950/95 to-slate-950/95 backdrop-blur-md">
+            <div className="flex h-full flex-col items-center justify-center p-6">
+              <div className="w-full max-w-md space-y-8 text-center">
+                <div className="flex justify-center">
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
+                    <div className="relative h-28 w-28 rounded-full bg-red-500/40 flex items-center justify-center border-4 border-red-500/50">
+                      <PhoneOff className="h-14 w-14 text-red-400" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-3xl font-bold text-red-400">
+                    Chamada Encerrada
+                  </h2>
+                  <p className="text-base text-slate-400">
+                    O morador encerrou a chamada.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    setCallEndedByResident(false);
+                    setWasConnected(false);
+                    setStatusMessage(null);
+                    setIntent("idle");
+                    stopDialToneSafely(); // Ensure dial tone is stopped
+                    dialToneCallIdRef.current = null; // Clear dial tone ref
+                  }}
+                  className="w-full h-14 text-lg"
+                >
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Video Call */}
+        {showVideoCall && currentCall && (
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
+            <CardContent className="pt-6">
+              <VideoCall
+                call={currentCall}
+                state={videoState}
+                localStream={videoLocalStream}
+                remoteStream={videoRemoteStream}
+                onHangup={() => {
+                  hangupVideoCall();
+                  setIntent("idle");
+                  setWasConnected(false);
+                  setCallEndedByResident(false); // Visitor ended, not resident
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* End Call Button */}
+        {(showAudioCall || showVideoCall) && (
+          <div className="flex justify-center">
+            <Button
+              variant="destructive"
+              size="lg"
+              onClick={() => {
+                if (showAudioCall) {
+                  hangupAudioCall();
+                }
+                if (showVideoCall) {
+                  hangupVideoCall();
+                }
+                setIntent("idle");
+              }}
+              className="w-full max-w-md"
+            >
+              <PhoneOff className="mr-2 h-4 w-4" />
+              Encerrar Chamada
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

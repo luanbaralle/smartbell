@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { QrCode, Download, Share2 } from "lucide-react";
@@ -11,9 +12,16 @@ interface QRDisplayProps {
 }
 
 export function QRDisplay({ house }: QRDisplayProps) {
-  const bellUrl = typeof window !== "undefined" 
-    ? `${window.location.origin}/bell/${house.id}`
-    : `/bell/${house.id}`;
+  // Use consistent URL to avoid hydration mismatch
+  // Use useState to ensure client-side rendering for URL
+  const [bellUrl, setBellUrl] = useState<string>("");
+
+  useEffect(() => {
+    // Only set URL on client side to avoid hydration mismatch
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                   (typeof window !== "undefined" ? window.location.origin : "");
+    setBellUrl(baseUrl ? `${baseUrl}/bell/${house.id}` : `/bell/${house.id}`);
+  }, [house.id]);
 
   const handleDownload = () => {
     // Implementar download do QR Code
@@ -73,12 +81,18 @@ export function QRDisplay({ house }: QRDisplayProps) {
         <div className="flex justify-center">
           <div className="p-4 bg-card rounded-lg border-2 border-primary/20 shadow-md">
             <div id={`qr-${house.id}`} className="h-64 w-64 flex items-center justify-center bg-white rounded-lg p-2">
-              <QRCodeSVG
-                value={bellUrl}
-                size={256}
-                level="H"
-                includeMargin={false}
-              />
+              {bellUrl ? (
+                <QRCodeSVG
+                  value={bellUrl}
+                  size={256}
+                  level="H"
+                  includeMargin={false}
+                />
+              ) : (
+                <div className="h-64 w-64 flex items-center justify-center text-muted-foreground">
+                  Carregando...
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -86,7 +100,7 @@ export function QRDisplay({ house }: QRDisplayProps) {
         <div className="space-y-2">
           <p className="text-sm font-medium text-center">{house.name}</p>
           <p className="text-xs text-muted-foreground text-center break-all">
-            {bellUrl}
+            {bellUrl || "Carregando URL..."}
           </p>
         </div>
 

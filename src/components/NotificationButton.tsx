@@ -1,36 +1,84 @@
 "use client";
 
-import { useState } from "react";
-import { Bell } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bell, BellOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 type NotificationButtonProps = {
-  onToken?: (token: string) => Promise<void> | void;
+  onSubscribed?: () => Promise<void> | void;
 };
 
-export function NotificationButton({ onToken }: NotificationButtonProps) {
-  const { subscribe, token, isLoading, error } = usePushNotifications();
+export function NotificationButton({ onSubscribed }: NotificationButtonProps) {
+  const {
+    subscribe,
+    unsubscribe,
+    isSubscribed,
+    isLoading,
+    error,
+    isSupported
+  } = usePushNotifications();
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const handleClick = async () => {
-    const result = await subscribe();
-    if (result) {
-      setFeedback("Notificações ativadas!");
-      await onToken?.(result);
-    } else if (error) {
+  useEffect(() => {
+    if (error) {
       setFeedback(error);
+      const timer = setTimeout(() => setFeedback(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const handleClick = async () => {
+    if (isSubscribed) {
+      const success = await unsubscribe();
+      if (success) {
+        setFeedback("Notificações desativadas");
+        setTimeout(() => setFeedback(null), 3000);
+      }
+    } else {
+      const result = await subscribe();
+      if (result) {
+        setFeedback("Notificações ativadas!");
+        await onSubscribed?.();
+        setTimeout(() => setFeedback(null), 3000);
+      }
     }
   };
 
+  if (!isSupported) {
+    return (
+      <div className="space-y-2">
+        <Button disabled variant="outline">
+          <Bell className="mr-2 h-4 w-4" />
+          Notificações não suportadas
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
-      <Button onClick={handleClick} disabled={isLoading || !!token}>
-        <Bell className="mr-2 h-4 w-4" />
-        {token ? "Notificações ativas" : "Ativar notificações"}
+      <Button
+        onClick={handleClick}
+        disabled={isLoading}
+        variant={isSubscribed ? "default" : "outline"}
+      >
+        {isSubscribed ? (
+          <>
+            <Bell className="mr-2 h-4 w-4" />
+            Notificações ativas
+          </>
+        ) : (
+          <>
+            <BellOff className="mr-2 h-4 w-4" />
+            Ativar notificações
+          </>
+        )}
       </Button>
-      {feedback && <p className="text-xs text-slate-400">{feedback}</p>}
+      {feedback && (
+        <p className="text-xs text-slate-400 animate-in fade-in">{feedback}</p>
+      )}
     </div>
   );
 }

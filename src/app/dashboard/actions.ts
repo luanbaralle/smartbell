@@ -118,10 +118,15 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
   const updatePayload: Database["public"]["Tables"]["calls"]["Update"] = {
     status,
     ended_at:
-      status === "missed" || status === "answered"
+      status === "missed" || status === "answered" || status === "ended"
         ? new Date().toISOString()
         : null
   };
+  
+  // Set started_at when call is answered
+  if (status === "answered") {
+    updatePayload.started_at = new Date().toISOString();
+  }
 
   const admin = supabaseAdminClient as unknown as {
     from: (table: string) => {

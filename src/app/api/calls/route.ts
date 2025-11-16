@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabaseAdminClient
     .from("calls")
     .insert(payload as any, { defaultToNull: false })
-    .select("id, house_id, type, status, session_id, visitor_name, created_at, ended_at")
+    .select("id, house_id, type, status, session_id, visitor_name, created_at, ended_at, started_at")
     .single();
 
   if (error) {
@@ -57,6 +57,16 @@ export async function POST(request: Request) {
   }
 
   const createdCall = data as Database["public"]["Tables"]["calls"]["Row"];
+  
+  // Log para debug (remover em produção se necessário)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[SmartBell] Call created successfully", {
+      callId: createdCall.id,
+      houseId: createdCall.house_id,
+      type: createdCall.type,
+      status: createdCall.status
+    });
+  }
 
   const { data: houseRow } = await supabaseAdminClient
     .from("houses")
@@ -64,32 +74,53 @@ export async function POST(request: Request) {
     .eq("id", houseId)
     .maybeSingle<Pick<Database["public"]["Tables"]["houses"]["Row"], "owner_id" | "name">>();
 
+  // Send push notification to house owner
   if (houseRow?.owner_id) {
-    const { data: residents } = await supabaseAdminClient
-      .from("users")
-      .select("fcm_token")
-      .eq("id", houseRow.owner_id)
-      .not("fcm_token", "is", null)
-      .returns<{ fcm_token: string | null }[]>();
-
-    const tokens =
-      residents
-        ?.map((resident) => resident.fcm_token)
-        .filter((token: string | null): token is string => Boolean(token)) ?? [];
-
-    if (tokens.length) {
+    try {
+      const { sendPushToUser } = await import("@/lib/webpush-server");
+      await sendPushToUser(houseRow.owner_id, {
+        title: "Visita no Smart Bell",
+        body: `Alguém está chamando ${houseRow.name ?? "sua residência"}.`,
+        data: {
+          call_id: createdCall.id,
+          house_id: houseId,
+          type: createdCall.type === "text" ? "chat" : createdCall.type === "audio" ? "audio" : "video",
+          url: `/call/${createdCall.id}`
+        }
+      });
+    } catch (pushError) {
+      console.error("[SmartBell] push notification error", pushError);
+      // Fallback to FCM if web-push fails
       try {
-        await sendPushNotification({
-          tokens,
-          title: "Visita no Smart Bell",
-          body: `Alguém está chamando ${houseRow.name ?? "sua residência"}.`,
-          data: {
-            callId: createdCall.id,
-            houseId
-          }
-        });
-      } catch (pushError) {
-        console.error("[SmartBell] push notification error", pushError);
+        const { data: residents } = await supabaseAdminClient
+          .from("users")
+          .select("fcm_token")
+          .eq("id", houseRow.owner_id)
+          .not("fcm_token", "is", null)
+          .returns<{ fcm_token: string | null }[]>();
+
+        const tokens =
+          residents
+            ?.map((resident) => resident.fcm_token)
+            .filter((token: string | null): token is string => Boolean(token)) ?? [];
+
+        if (tokens.length) {
+          await sendPushNotification({
+            tokens,
+            title: "Visita no Smart Bell",
+            body: `Alguém está chamando ${houseRow.name ?? "sua residência"}.`,
+            data: {
+              callId: createdCall.id,
+              houseId,
+              call_id: createdCall.id,
+              house_id: houseId,
+              type: createdCall.type,
+              url: `/call/${createdCall.id}`
+            }
+          });
+        }
+      } catch (fcmError) {
+        console.error("[SmartBell] FCM fallback error", fcmError);
       }
     }
   }

@@ -1,58 +1,129 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { getFirebaseMessaging } from "@/lib/fcm";
-import { getToken, isSupported } from "firebase/messaging";
+import { useCallback, useEffect, useState } from "react";
+import {
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
+  getCurrentPushSubscription,
+  type PushSubscription
+} from "@/lib/webpush";
 
 export function usePushNotifications() {
-  const [token, setToken] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSupported, setIsSupported] = useState(false);
+
+  // Check support on mount
+  useEffect(() => {
+    setIsSupported(
+      typeof window !== "undefined" &&
+        "serviceWorker" in navigator &&
+        "PushManager" in window
+    );
+  }, []);
+
+  // Load existing subscription on mount
+  useEffect(() => {
+    if (!isSupported) return;
+
+    const loadSubscription = async () => {
+      try {
+        const current = await getCurrentPushSubscription();
+        if (current) {
+          setSubscription(current);
+        }
+      } catch (err) {
+        console.error("[SmartBell] Load subscription error", err);
+      }
+    };
+
+    loadSubscription();
+  }, [isSupported]);
 
   const subscribe = useCallback(async () => {
-    if (!(await isSupported())) {
+    if (!isSupported) {
       setError("Dispositivo não suporta notificações push.");
-      return null;
-    }
-
-    const messaging = getFirebaseMessaging();
-    if (!messaging) {
-      setError("Firebase Messaging não configurado.");
       return null;
     }
 
     try {
       setIsLoading(true);
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setError("Permissão de notificações não concedida.");
+      setError(null);
+
+      const pushSubscription = await subscribeToPushNotifications();
+
+      if (!pushSubscription) {
+        setError("Não foi possível obter subscription de notificações.");
         return null;
       }
 
-      const registration = await navigator.serviceWorker.ready;
-
-      const fcmToken = await getToken(messaging, {
-        vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-        serviceWorkerRegistration: registration
+      // Register subscription on server
+      const response = await fetch("/api/push/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          endpoint: pushSubscription.endpoint,
+          p256dh: pushSubscription.keys.p256dh,
+          auth: pushSubscription.keys.auth
+        })
       });
 
-      if (!fcmToken) {
-        setError("Não foi possível obter token de notificações.");
-        return null;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Erro ao registrar subscription no servidor");
       }
 
-      setToken(fcmToken);
-      setError(null);
-      return fcmToken;
+      setSubscription(pushSubscription);
+      return pushSubscription;
     } catch (err) {
-      console.error("[SmartBell] push subscription error", err);
-      setError("Erro ao registrar notificações.");
+      console.error("[SmartBell] Push subscription error", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Erro ao registrar notificações.";
+      setError(errorMessage);
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isSupported]);
 
-  return { token, isLoading, error, subscribe };
+  const unsubscribe = useCallback(async () => {
+    if (!subscription) return false;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Remove from server
+      await fetch(`/api/push/register?endpoint=${encodeURIComponent(subscription.endpoint)}`, {
+        method: "DELETE"
+      }).catch((err) => {
+        console.warn("[SmartBell] Server unsubscribe error", err);
+      });
+
+      // Unsubscribe locally
+      await unsubscribeFromPushNotifications();
+      setSubscription(null);
+      return true;
+    } catch (err) {
+      console.error("[SmartBell] Push unsubscribe error", err);
+      setError("Erro ao cancelar notificações.");
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [subscription]);
+
+  return {
+    subscription,
+    isLoading,
+    error,
+    subscribe,
+    unsubscribe,
+    isSupported,
+    isSubscribed: subscription !== null
+  };
 }
 

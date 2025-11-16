@@ -18,7 +18,7 @@ export type UserProfile = {
 
 export type CallType = "text" | "audio" | "video";
 
-export type CallStatus = "pending" | "answered" | "missed";
+export type CallStatus = "pending" | "answered" | "missed" | "ended";
 
 export type Call = {
   id: string;

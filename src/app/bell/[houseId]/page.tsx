@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { CallClient } from "@/app/bell/[houseId]/CallClient";
-import { listHouseCalls } from "@/lib/repository/calls";
+import { listHouseCalls, getCallById } from "@/lib/repository/calls";
 import { getHouseById } from "@/lib/repository/houses";
 import { listMessagesByCall } from "@/lib/repository/messages";
 
@@ -19,17 +19,13 @@ export default async function BellHousePage({ params }: PageProps) {
     notFound();
   }
 
-  const calls = await listHouseCalls(house.id);
-  const initialCall = calls.length > 0 ? calls[0] : null;
-  const initialMessages = initialCall
-    ? await listMessagesByCall(initialCall.id)
-    : [];
-
+  // Visitante sempre começa sem chamada - não carregar chamadas antigas
+  // Cada acesso é uma nova sessão
   return (
     <CallClient
       house={house}
-      initialCall={initialCall}
-      initialMessages={initialMessages}
+      initialCall={null}
+      initialMessages={[]}
     />
   );
 }

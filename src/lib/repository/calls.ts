@@ -35,27 +35,45 @@ export async function createCall(input: {
   return data;
 }
 
+export async function getCallById(callId: string): Promise<Call | null> {
+  if (!supabaseAdminClient) {
+    throw new Error("Supabase admin client not configured.");
+  }
+
+  const { data, error } = await supabaseAdminClient
+    .from("calls")
+    .select("*")
+    .eq("id", callId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[SmartBell] failed to get call", error);
+    return null;
+  }
+
+  return data;
+}
+
 export async function updateCallStatus(callId: string, status: CallStatus) {
   if (!supabaseAdminClient) {
     throw new Error("Supabase admin client not configured.");
   }
 
-  const adminCalls = supabaseAdminClient as unknown as {
-    from: (table: "calls") => {
-      update: (
-        values: Database["public"]["Tables"]["calls"]["Update"]
-      ) => {
-        eq: (
-          column: "id",
-          value: string
-        ) => Promise<{ error: Error | null }>;
-      };
-    };
+  const updateData: Database["public"]["Tables"]["calls"]["Update"] = {
+    status
   };
 
-  const { error } = await adminCalls
+  if (status === "answered") {
+    updateData.started_at = new Date().toISOString();
+  }
+
+  if (status === "missed" || status === "answered" || status === "ended") {
+    updateData.ended_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdminClient
     .from("calls")
-    .update({ status })
+    .update(updateData)
     .eq("id", callId);
 
   if (error) {
@@ -83,4 +101,3 @@ export async function listHouseCalls(houseId: string): Promise<Call[]> {
 
   return data ?? [];
 }
-

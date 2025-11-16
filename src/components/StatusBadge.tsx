@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type CallStatus = "pending" | "answered" | "missed" | "active";
+type CallStatus = "pending" | "answered" | "missed" | "ended" | "active";
 
 interface StatusBadgeProps {
   status: CallStatus;
@@ -20,6 +20,10 @@ const statusConfig = {
   missed: {
     label: "Perdida",
     className: "bg-destructive/10 text-destructive border-destructive/20",
+  },
+  ended: {
+    label: "Encerrada",
+    className: "bg-slate-500/10 text-slate-500 border-slate-500/20",
   },
   active: {
     label: "Ativa",
