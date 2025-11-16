@@ -239,21 +239,65 @@ export function useAudioCall(
       }
       return null;
     }
-    if (localStream) return localStream;
+    if (localStream) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Reusing existing local stream");
+      }
+      return localStream;
+    }
 
     try {
-      // Request microphone access with better constraints for mobile
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+      // Detectar se é mobile/Safari
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      // Para mobile/Safari, usar constraints mais simples
+      // Constraints muito específicas podem falhar no Safari iOS
+      let audioConstraints: MediaTrackConstraints | boolean = true;
+      
+      if (!isMobile || !isSafari) {
+        // Para desktop, usar constraints mais específicas
+        audioConstraints = {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          // Mobile-specific constraints
           sampleRate: 48000,
           channelCount: 1
-        },
-        video: false
-      });
+        };
+      } else {
+        // Para mobile/Safari, usar apenas true ou constraints mínimas
+        // Safari iOS pode rejeitar constraints muito específicas
+        audioConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true
+        };
+      }
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Requesting microphone access", {
+          isMobile,
+          isSafari,
+          audioConstraints
+        });
+      }
+      
+      // Tentar primeiro com constraints específicas
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false
+        });
+      } catch (error) {
+        // Se falhar, tentar com constraints mínimas (apenas true)
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useAudioCall] Failed with specific constraints, trying minimal", error);
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
+      }
 
       if (process.env.NODE_ENV === "development") {
         console.log("[useAudioCall] Microphone access granted", {

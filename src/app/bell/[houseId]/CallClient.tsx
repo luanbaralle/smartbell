@@ -786,21 +786,22 @@ export function CallClient({
     
     // No mobile, we need to request microphone permission first
     // This must be done in response to user interaction
+    // IMPORTANTE: No Safari iOS, não podemos solicitar permissão duas vezes
+    // então vamos apenas verificar se está disponível, não solicitar aqui
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        // Request microphone permission early (in response to user click)
-        // This helps with mobile browsers that require user interaction
-        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Stop the test stream immediately - we just needed permission
-        testStream.getTracks().forEach(track => track.stop());
-        
-        if (process.env.NODE_ENV === "development") {
-          console.log("[CallClient] Microphone permission granted");
-        }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatusMessage("Seu navegador não suporta acesso ao microfone.");
+        return;
+      }
+      
+      // Verificar permissão sem solicitar (para não causar erro no Safari iOS)
+      // A permissão será solicitada quando startLocalAudio for chamado
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CallClient] MediaDevices available, will request permission when starting call");
       }
     } catch (error) {
-      console.error("[CallClient] Error requesting microphone permission", error);
-      setStatusMessage("Permissão de microfone necessária para fazer chamadas.");
+      console.error("[CallClient] Error checking media devices", error);
+      setStatusMessage("Erro ao verificar acesso ao microfone.");
       return;
     }
     
