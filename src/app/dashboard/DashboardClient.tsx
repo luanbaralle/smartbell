@@ -194,10 +194,15 @@ export function DashboardClient({
     }
     
     // Detectar quando visitante encerra a chamada
+    // Verificar se foi o visitante que encerrou (from !== profile.id)
     if (event.type === "call.hangup" && !callEndedByResident && !callEndedByVisitor) {
-      // Visitante encerrou a chamada
-      setCallEndedByVisitor(true);
-      setCallEndedByResident(false);
+      const wasEndedByVisitor = event.from !== profile.id;
+      if (wasEndedByVisitor) {
+        // Visitante encerrou a chamada
+        setCallEndedByVisitor(true);
+        setCallEndedByResident(false);
+      }
+      // Se foi o morador que encerrou, já foi setado no onHangup, não fazer nada aqui
     }
   }, [callState, callEndedByResident, callEndedByVisitor]);
 

@@ -692,13 +692,20 @@ export function CallClient({
         setIntent("idle");
       }
     } else if (event.type === "call.hangup") {
-      // Chamada encerrada pelo morador - só setar se ainda não foi setado
+      // Chamada encerrada - verificar quem encerrou pelo campo 'from' do evento
+      // Se 'from' é o visitante, então o visitante encerrou (já foi setado no onHangup)
+      // Se 'from' é o morador, então o morador encerrou
       if (!callEndedByResident && !callEndedByVisitor) {
-        stopDialToneSafely();
-        setCallEndedByResident(true);
-        setCallEndedByVisitor(false);
-        setStatusMessage("Chamada encerrada pelo morador.");
-        setIntent("idle");
+        // Verificar se foi o morador que encerrou (from !== visitorId)
+        const wasEndedByResident = event.from !== visitorIdRef.current;
+        if (wasEndedByResident) {
+          stopDialToneSafely();
+          setCallEndedByResident(true);
+          setCallEndedByVisitor(false);
+          setStatusMessage("Chamada encerrada pelo morador.");
+          setIntent("idle");
+        }
+        // Se foi o visitante que encerrou, já foi setado no onHangup, não fazer nada aqui
       }
     }
   }, [callState, callEndedByResident, callEndedByVisitor, stopDialToneSafely]);
