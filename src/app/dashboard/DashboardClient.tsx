@@ -99,6 +99,8 @@ export function DashboardClient({
   const [isSigningOut, startSignOut] = useTransition();
   const [isCreatingHouse, setIsCreatingHouse] = useState(false);
   const [housesList, setHousesList] = useState<House[]>(houses);
+  const [callEndedByResident, setCallEndedByResident] = useState(false); // Track if call was ended by resident (self)
+  const [callEndedByVisitor, setCallEndedByVisitor] = useState(false); // Track if call was ended by visitor
 
   const selectedCall = selectedCallId ? callMap[selectedCallId] : null;
   const selectedMessages = selectedCallId ? messageMap[selectedCallId] ?? [] : [];
