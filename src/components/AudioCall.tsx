@@ -62,7 +62,14 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
       <audio id="smartbell-remote-audio" autoPlay />
       <Button 
         variant={isConnected ? "destructive" : "outline"} 
-        onClick={onHangup}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (process.env.NODE_ENV === "development") {
+            console.log(`[AudioCall] Button clicked, calling onHangup`);
+          }
+          onHangup();
+        }}
         className={isConnected ? "bg-red-500 hover:bg-red-600 text-white" : ""}
       >
         <PhoneOff className="mr-2 h-4 w-4" />
