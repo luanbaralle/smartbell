@@ -300,10 +300,47 @@ export function useAudioCall(
       }
       
       setConnectionState("calling");
-      await startLocalAudio();
+      
+      // CRÍTICO: Criar peer connection ANTES de obter o stream
+      // Isso garante que o onTrack está registrado antes de adicionar tracks
       const pc = ensurePeerConnection();
-      const offer = await pc.createOffer();
+      
+      // Obter stream local
+      const localStream = await startLocalAudio();
+      if (!localStream) {
+        throw new Error("Failed to get local audio stream");
+      }
+      
+      // Verificar se os tracks foram adicionados corretamente
+      const senders = pc.getSenders();
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Peer connection senders after adding tracks", {
+          sendersCount: senders.length,
+          tracks: senders.map(s => ({
+            trackId: s.track?.id,
+            trackKind: s.track?.kind,
+            trackEnabled: s.track?.enabled,
+            trackReadyState: s.track?.readyState
+          }))
+        });
+      }
+      
+      // Criar offer com configuração para áudio
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
+      
       await pc.setLocalDescription(offer);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Offer created", {
+          sdp: offer.sdp?.substring(0, 200),
+          hasAudio: offer.sdp?.includes("m=audio"),
+          hasVideo: offer.sdp?.includes("m=video")
+        });
+      }
+      
       const payload: BroadcastPayload = { type: "offer", sdp: offer };
       
       if (process.env.NODE_ENV === "development") {
@@ -338,14 +375,53 @@ export function useAudioCall(
     }
     
     try {
-      await startLocalAudio();
+      // CRÍTICO: Criar peer connection ANTES de obter o stream
+      // Isso garante que o onTrack está registrado antes de adicionar tracks
       const pc = ensurePeerConnection();
+      
+      // Obter stream local
+      const localStream = await startLocalAudio();
+      if (!localStream) {
+        throw new Error("Failed to get local audio stream");
+      }
+      
+      // Verificar se os tracks foram adicionados corretamente
+      const senders = pc.getSenders();
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Peer connection senders after adding tracks", {
+          sendersCount: senders.length,
+          tracks: senders.map(s => ({
+            trackId: s.track?.id,
+            trackKind: s.track?.kind,
+            trackEnabled: s.track?.enabled,
+            trackReadyState: s.track?.readyState
+          }))
+        });
+      }
+      
+      // Configurar remote description
       await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
-      const answer = await pc.createAnswer();
+      
+      // Criar answer com configuração para áudio
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
+      
       await pc.setLocalDescription(answer);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SmartBell] Answer created", {
+          sdp: answer.sdp?.substring(0, 200),
+          hasAudio: answer.sdp?.includes("m=audio"),
+          hasVideo: answer.sdp?.includes("m=video")
+        });
+      }
+      
       const payload: BroadcastPayload = { type: "answer", sdp: answer };
       await sendSignal(payload);
       await flushCandidates();
+      
       // Set connection state first, then clear pending offer
       // This ensures UI components see "connected" before pendingOffer is cleared
       setConnectionState("connected");
