@@ -965,12 +965,22 @@ export function CallClient({
                   variant="outline"
                   size="lg"
                   onClick={() => {
+                    // Limpar estado local se houver callId
+                    if (callId) {
+                      callState.cleanupCall(callId);
+                    }
+                    
+                    // Reset todos os estados e refs
                     setCallEndedByResident(false);
                     setWasConnected(false);
                     setStatusMessage(null);
                     setIntent("idle");
                     stopDialToneSafely(); // Ensure dial tone is stopped
                     dialToneCallIdRef.current = null; // Clear dial tone ref
+                    webrtcInitiatedRef.current = null; // Clear WebRTC ref
+                    prevCallEndedByResidentRef.current = false;
+                    prevWasConnectedRef.current = false;
+                    prevAudioStateRef.current = "idle";
                   }}
                   className="w-full h-14 text-lg"
                 >
