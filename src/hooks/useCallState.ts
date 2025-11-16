@@ -159,8 +159,9 @@ export function useCallState({ userId, role, onStateChange }: UseCallStateOption
 
   /**
    * Handler para eventos de sinalização (idempotente)
+   * Retorna evento de rejeição se usuário está ocupado, caso contrário retorna undefined
    */
-  const handleSignalingEvent = useCallback((event: SignalingEvent) => {
+  const handleSignalingEvent = useCallback((event: SignalingEvent): SignalingEvent | undefined => {
     const { type, callId, from, to } = event;
     
     console.log(`[useCallState] Handling ${type} for call ${callId}`, { from, to, role });
