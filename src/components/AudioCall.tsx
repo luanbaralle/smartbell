@@ -87,6 +87,11 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
           {state === "connected" && "Conexão estabelecida - Chamada ativa"}
           {state === "idle" && "Sessão finalizada."}
         </p>
+        {isConnected && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {remoteStream ? "Áudio recebido ✓" : "Aguardando áudio..."}
+          </p>
+        )}
       </div>
       <audio 
         id="smartbell-remote-audio" 
