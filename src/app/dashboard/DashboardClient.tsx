@@ -232,15 +232,18 @@ export function DashboardClient({
       if (call.status === "pending" && call.type === "audio") {
         setupSignalingChannel(call.id);
         
-        // Selecionar automaticamente a chamada se não houver chamada selecionada ou se for nova
-        if (!selectedCallId || call.id !== selectedCallId) {
-          // Verificar se é uma nova chamada (não existe no callState ainda)
-          const localCall = callState.getCall(call.id);
-          if (!localCall) {
-            // Selecionar a chamada automaticamente
+        // Verificar se é uma nova chamada (não existe no callState ainda)
+        const localCall = callState.getCall(call.id);
+        if (!localCall) {
+          // IMPORTANTE: Selecionar a chamada ANTES de processar o evento
+          // Isso garante que useAudioCall está pronto para receber o offer
+          if (!selectedCallId || call.id !== selectedCallId) {
             setSelectedCallId(call.id);
-            
-            // Simular evento call.request (vindo do visitante)
+          }
+          
+          // Aguardar um tick para garantir que selectedCallId foi atualizado
+          // e useAudioCall está pronto antes de processar o evento
+          setTimeout(() => {
             handleSignalingEvent({
               type: "call.request",
               callId: call.id,
@@ -248,19 +251,7 @@ export function DashboardClient({
               to: profile.id,
               timestamp: Date.now()
             });
-          }
-        } else {
-          // Chamada já selecionada, apenas processar se não existe no callState
-          const localCall = callState.getCall(call.id);
-          if (!localCall) {
-            handleSignalingEvent({
-              type: "call.request",
-              callId: call.id,
-              from: call.session_id || "visitor",
-              to: profile.id,
-              timestamp: Date.now()
-            });
-          }
+          }, 0);
         }
       }
     });
@@ -778,7 +769,7 @@ export function DashboardClient({
           open={true}
           onAccept={handleModalAccept}
           onReject={handleRejectAudioCall}
-          hasPendingOffer={!!audioPendingOffer && activeIncomingCall.id === selectedCallIdValue}
+          hasPendingOffer={!!audioPendingOffer && (activeIncomingCall.id === selectedCallIdValue || !selectedCallIdValue)}
         />
       )}
       {/* Header */}
