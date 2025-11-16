@@ -1,10 +1,9 @@
 "use client";
 
-import { RefObject, useImperativeHandle, useRef, useState } from "react";
+import React, { RefObject, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Mic } from "lucide-react";
 import type { Message } from "@/types";
 import { cn, formatDate } from "@/lib/utils";
@@ -17,7 +16,7 @@ type ChatWindowProps = {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
 };
 
-export function ChatWindow({
+function ChatWindowComponent({
   messages,
   onSendMessage,
   isSending = false,
@@ -28,6 +27,7 @@ export function ChatWindow({
   const [error, setError] = useState<string | null>(null);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // useImperativeHandle handles null/undefined refs gracefully
   useImperativeHandle(
     textareaRef,
     () => internalRef.current as HTMLTextAreaElement,
@@ -50,21 +50,17 @@ export function ChatWindow({
     handleSubmit();
   };
 
-  return (
-    <Card className="flex flex-col h-[500px] shadow-lg">
-      <CardHeader className="bg-gradient-card border-b">
-        <CardTitle className="text-lg">Mensagens</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-0">
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">Nenhuma mensagem ainda</p>
-                <p className="text-xs mt-1">Envie uma mensagem para iniciar a conversa</p>
-              </div>
-            ) : (
-              messages.map((message) => {
+  // Memoize the messages list to prevent ScrollArea from re-rendering unnecessarily
+  const messagesContent = useMemo(() => {
+    if (messages.length === 0) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Nenhuma mensagem ainda</p>
+          <p className="text-xs mt-1">Envie uma mensagem para iniciar a conversa</p>
+        </div>
+      );
+    }
+    return messages.map((message) => {
                 const isVisitor = !message.sender;
                 return (
                   <div
@@ -97,10 +93,20 @@ export function ChatWindow({
                     </div>
                   </div>
                 );
-              })
-            )}
+              });
+  }, [messages]);
+
+  return (
+    <Card className="flex flex-col h-[500px] shadow-lg">
+      <CardHeader className="bg-gradient-card border-b">
+        <CardTitle className="text-lg">Mensagens</CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col p-0">
+        <div className="flex-1 p-4 overflow-y-auto">
+          <div className="space-y-4">
+            {messagesContent}
           </div>
-        </ScrollArea>
+        </div>
         
         <div className="p-4 border-t bg-card">
           {error && (
@@ -148,3 +154,7 @@ export function ChatWindow({
     </Card>
   );
 }
+
+// Memoize ChatWindow to prevent unnecessary re-renders that cause ScrollArea ref issues
+// Use shallow comparison - only re-render if messages array reference changes
+export const ChatWindow = React.memo(ChatWindowComponent);

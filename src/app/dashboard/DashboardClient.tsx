@@ -60,6 +60,9 @@ const quickReplies = [
   "Não posso atender agora, volte mais tarde."
 ];
 
+// Stable empty array reference to prevent unnecessary re-renders
+const EMPTY_MESSAGES: Message[] = [];
+
 export function DashboardClient({
   profile,
   houses,
@@ -103,6 +106,10 @@ export function DashboardClient({
   );
   const [isSending, setIsSending] = useState(false);
   const audioSectionRef = useRef<HTMLDivElement | null>(null);
+  // Initialize ref with call IDs that already have messages loaded
+  const loadedCallIdsRef = useRef<Set<string>>(
+    new Set(Object.keys(messages).filter(key => messages[key] && messages[key].length > 0))
+  );
   const [isSigningOut, startSignOut] = useTransition();
   const [isCreatingHouse, setIsCreatingHouse] = useState(false);
   const [housesList, setHousesList] = useState<House[]>(houses);
@@ -110,7 +117,37 @@ export function DashboardClient({
   const [callEndedByVisitor, setCallEndedByVisitor] = useState(false); // Track if call was ended by visitor
 
   const selectedCall = selectedCallId ? callMap[selectedCallId] : null;
-  const selectedMessages = selectedCallId ? messageMap[selectedCallId] ?? [] : [];
+  // Track the current messages array reference to detect actual changes
+  const lastMessagesRef = useRef<Message[] | null>(null);
+  const lastCallIdRef = useRef<string | null>(null);
+  
+  // Get current messages for selected call
+  const currentMessagesForCall = selectedCallId ? (messageMap[selectedCallId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
+  
+  // Only update selectedMessages when the actual messages array reference changes
+  const selectedMessages = useMemo(() => {
+    if (!selectedCallId) {
+      lastCallIdRef.current = null;
+      lastMessagesRef.current = null;
+      return EMPTY_MESSAGES;
+    }
+    
+    // If call ID changed, always update
+    if (lastCallIdRef.current !== selectedCallId) {
+      lastCallIdRef.current = selectedCallId;
+      lastMessagesRef.current = currentMessagesForCall;
+      return currentMessagesForCall;
+    }
+    
+    // If messages array reference changed, update
+    if (lastMessagesRef.current !== currentMessagesForCall) {
+      lastMessagesRef.current = currentMessagesForCall;
+      return currentMessagesForCall;
+    }
+    
+    // Return the same reference to prevent re-renders
+    return lastMessagesRef.current || EMPTY_MESSAGES;
+  }, [selectedCallId, currentMessagesForCall]); // Only depend on selectedCallId and the specific messages array
   const audioCall = useAudioCall(selectedCallId, "resident");
   const videoCall = useVideoCall(selectedCallId, "resident");
   const { playRingTone, stopRingTone } = useCallSounds();
@@ -554,7 +591,9 @@ export function DashboardClient({
 
   useEffect(() => {
     if (!selectedCallId) return;
-    if (messageMap[selectedCallId]) return;
+    
+    // Use a ref to track loaded call IDs to avoid dependency on messageMap
+    if (loadedCallIdsRef.current.has(selectedCallId)) return;
 
     const controller = new AbortController();
     fetch(`/api/messages?callId=${selectedCallId}`, {
@@ -567,10 +606,17 @@ export function DashboardClient({
         return response.json();
       })
       .then((data) => {
-        setMessageMap((prev) => ({
-          ...prev,
-          [selectedCallId]: data.messages ?? []
-        }));
+        setMessageMap((prev) => {
+          // Only update if we don't already have messages for this call
+          if (prev[selectedCallId] && prev[selectedCallId].length > 0) {
+            return prev;
+          }
+          loadedCallIdsRef.current.add(selectedCallId);
+          return {
+            ...prev,
+            [selectedCallId]: data.messages ?? []
+          };
+        });
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
@@ -579,7 +625,7 @@ export function DashboardClient({
       });
 
     return () => controller.abort();
-  }, [messageMap, selectedCallId]);
+  }, [selectedCallId]); // Removed messageMap from dependencies to prevent infinite loops
 
   const handleSendMessage = useCallback(
     async (content: string) => {
