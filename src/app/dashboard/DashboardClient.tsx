@@ -166,7 +166,7 @@ export function DashboardClient({
       console.error("[DashboardClient] Error converting callsMap to array", error);
       return [];
     }
-  }, [callsMapSize, callState?.callsMap]);
+  }, [callsMapSize]);
   const activeIncomingCall = useMemo(() => {
     try {
       const activeCalls = callsMapArray.filter(call => call.state === "ringing" || call.state === "in_call");
