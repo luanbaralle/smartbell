@@ -235,14 +235,17 @@ export function DashboardClient({
         // Verificar se é uma nova chamada (não existe no callState ainda)
         const localCall = callState.getCall(call.id);
         if (!localCall) {
-          // IMPORTANTE: Selecionar a chamada ANTES de processar o evento
-          // Isso garante que useAudioCall está pronto para receber o offer
+          // CRÍTICO: Selecionar a chamada IMEDIATAMENTE para que useAudioCall se inscreva no canal WebRTC
+          // Isso deve acontecer ANTES do visitante enviar o offer
           if (!selectedCallId || call.id !== selectedCallId) {
+            if (process.env.NODE_ENV === "development") {
+              console.log("[DashboardClient] Selecionando chamada automaticamente", call.id);
+            }
             setSelectedCallId(call.id);
           }
           
-          // Aguardar um tick para garantir que selectedCallId foi atualizado
-          // e useAudioCall está pronto antes de processar o evento
+          // Processar evento call.request após garantir que selectedCallId foi atualizado
+          // useAudioCall precisa de tempo para se inscrever no canal webrtc:${callId}
           setTimeout(() => {
             handleSignalingEvent({
               type: "call.request",
@@ -251,11 +254,26 @@ export function DashboardClient({
               to: profile.id,
               timestamp: Date.now()
             });
-          }, 0);
+          }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
   }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
+
+  /**
+   * Monitorar quando audioPendingOffer muda para debug
+   */
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      if (audioPendingOffer) {
+        console.log("[DashboardClient] ✅ Offer recebido!", {
+          callId: selectedCallIdValue,
+          hasOffer: !!audioPendingOffer,
+          selectedCallId: selectedCallIdValue
+        });
+      }
+    }
+  }, [audioPendingOffer, selectedCallIdValue]);
 
   /**
    * Tocar ring tone quando há chamada ringing E há offer pendente
