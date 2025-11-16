@@ -222,16 +222,35 @@ export function useAudioCall(
   const initiateCall = useCallback(
     async (overrideCallId?: string) => {
       const targetCallId = overrideCallId ?? callId;
-      if (!targetCallId) return;
+      if (!targetCallId) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useAudioCall] initiateCall called but no callId", { callId, overrideCallId });
+        }
+        return;
+      }
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] initiateCall starting", { targetCallId, role });
+      }
+      
       setConnectionState("calling");
       await startLocalAudio();
       const pc = ensurePeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       const payload: BroadcastPayload = { type: "offer", sdp: offer };
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Sending offer", { targetCallId, role, hasSendSignal: !!sendSignal });
+      }
+      
       await sendSignal(payload);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Offer sent successfully", { targetCallId, role });
+      }
     },
-    [callId, ensurePeerConnection, sendSignal, startLocalAudio]
+    [callId, ensurePeerConnection, sendSignal, startLocalAudio, role]
   );
 
   const acceptCall = useCallback(async () => {

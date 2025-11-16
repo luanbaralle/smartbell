@@ -178,8 +178,17 @@ export function CallClient({
     
     (async () => {
       try {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CallClient] Iniciando chamada WebRTC", { callId, intent });
+        }
+        
         // Iniciar WebRTC
         await initiateAudioCall(callId);
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CallClient] Chamada WebRTC iniciada com sucesso", { callId });
+        }
+        
         if (!cancelled) {
           // Estado será atualizado quando receber call.accept
         }
