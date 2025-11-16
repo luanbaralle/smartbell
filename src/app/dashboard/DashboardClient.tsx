@@ -637,7 +637,7 @@ export function DashboardClient({
     // Update refs for next comparison
     prevAudioStateRef.current = audioState;
     prevVideoStateRef.current = videoState;
-  }, [selectedCall, audioState, videoState, handleUpdateStatus]);
+  }, [selectedCall, audioState, videoState, handleUpdateStatus, callMap, callState]);
 
   const handleSaveFcm = useCallback(async (token: string) => {
     try {
