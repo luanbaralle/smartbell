@@ -649,10 +649,15 @@ export function CallClient({
     // Não processar eventos se chamada já foi encerrada (evitar loops)
     // EXCETO se for um call.hangup do outro lado (para mostrar overlay correto)
     const isOwnHangup = event.type === "call.hangup" && event.from === visitorIdRef.current;
-    const shouldIgnore = (callEndedByResident || callEndedByVisitor) && 
-                        (event.type === "call.reject" || event.type === "call.status" || isOwnHangup);
+    const isHangupFromOther = event.type === "call.hangup" && event.from !== visitorIdRef.current;
     
-    if (shouldIgnore) {
+    // Ignorar apenas se:
+    // 1. Chamada já foi encerrada E
+    // 2. É um evento que não precisa processar (reject, status, ou próprio hangup)
+    // NÃO ignorar se for hangup do outro lado
+    if ((callEndedByResident || callEndedByVisitor) && 
+        (event.type === "call.reject" || event.type === "call.status" || isOwnHangup) &&
+        !isHangupFromOther) {
       if (process.env.NODE_ENV === "development") {
         console.log(`[CallClient] Ignoring ${event.type} event - call already ended or own hangup`);
       }
