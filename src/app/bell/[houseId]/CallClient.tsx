@@ -660,25 +660,31 @@ export function CallClient({
         setIntent("audio-active");
         stopDialToneSafely();
       } else if (localCall.state === "ended") {
-        // Chamada encerrada
-        setCallEndedByResident(true);
-        setIntent("idle");
-        stopDialToneSafely();
+        // Chamada encerrada - só setar se ainda não foi setado (evitar loops)
+        if (!callEndedByResident) {
+          setCallEndedByResident(true);
+          setIntent("idle");
+          stopDialToneSafely();
+        }
       }
     }
     
     // Processar eventos específicos
     if (event.type === "call.reject") {
-      // Chamada rejeitada
-      stopDialToneSafely();
-      setStatusMessage("Chamada recusada pelo morador.");
-      setIntent("idle");
+      // Chamada rejeitada - só processar se não foi encerrada
+      if (!callEndedByResident) {
+        stopDialToneSafely();
+        setStatusMessage("Chamada recusada pelo morador.");
+        setIntent("idle");
+      }
     } else if (event.type === "call.hangup") {
-      // Chamada encerrada pelo morador
-      stopDialToneSafely();
-      setCallEndedByResident(true);
-      setStatusMessage("Chamada encerrada pelo morador.");
-      setIntent("idle");
+      // Chamada encerrada pelo morador - só setar se ainda não foi setado
+      if (!callEndedByResident) {
+        stopDialToneSafely();
+        setCallEndedByResident(true);
+        setStatusMessage("Chamada encerrada pelo morador.");
+        setIntent("idle");
+      }
     }
   }, [callState, stopDialToneSafely]);
 
