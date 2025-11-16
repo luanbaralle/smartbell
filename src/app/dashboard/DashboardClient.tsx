@@ -616,10 +616,22 @@ export function DashboardClient({
     
     if (selectedCall.status === "answered" && (wasAudioConnected || wasVideoConnected) && isNowIdle) {
       // Call was ended - limpar estado local e atualizar status no banco
-      callState.cleanupCall(selectedCall.id);
-      handleUpdateStatus("ended").catch((error) => {
-        console.error("[SmartBell] Error updating call status to ended", error);
-      });
+      const callIdToUpdate = selectedCall.id;
+      callState.cleanupCall(callIdToUpdate);
+      
+      // Verificar se a chamada ainda existe antes de atualizar
+      if (callMap[callIdToUpdate]) {
+        handleUpdateStatus("ended").catch((error) => {
+          // Erro já é logado em handleUpdateStatus, apenas logar aqui se necessário
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[SmartBell] Error updating call status to ended (non-critical)", error);
+          }
+        });
+      } else {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[SmartBell] Call already removed from callMap, skipping status update");
+        }
+      }
     }
     
     // Update refs for next comparison
