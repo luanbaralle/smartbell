@@ -591,7 +591,7 @@ export function DashboardClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             callId: selectedCallId,
-            sender: profile?.id || "",
+            sender: userId,
             content
           })
         });
