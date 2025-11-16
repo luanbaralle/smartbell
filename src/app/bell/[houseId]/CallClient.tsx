@@ -25,6 +25,14 @@ import { Bell, Phone, Video, MessageSquare, PhoneOff, Clock } from "lucide-react
 import { useAudioCall } from "@/hooks/useAudioCall";
 import { useVideoCall } from "@/hooks/useVideoCall";
 import { useCallSounds } from "@/hooks/useCallSounds";
+import { useCallState } from "@/hooks/useCallState";
+import { 
+  createSignalingChannel, 
+  sendSignalingEvent, 
+  subscribeToSignalingEvents,
+  createSignalingEvent 
+} from "@/lib/call-signaling";
+import type { SignalingEvent } from "@/types/call-signaling";
 import type { Call, CallType, House, Message } from "@/types";
 import { createRealtimeChannel } from "@/lib/realtime";
 import { cn, formatDate } from "@/lib/utils";
@@ -59,6 +67,27 @@ export function CallClient({
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const callId = currentCall?.id ?? null;
+  
+  // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
+  // Usar session_id como identificador do visitante (ou gerar um único)
+  const visitorIdRef = useRef<string>(() => {
+    // Gerar ID único para esta sessão do visitante
+    return `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  });
+  
+  const callState = useCallState({
+    userId: visitorIdRef.current,
+    role: "caller",
+    onStateChange: (callId, newState) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[CallClient] Call ${callId} state changed to ${newState}`);
+      }
+    }
+  });
+
+  // Refs para canais de sinalização
+  const signalingChannelsRef = useRef<Map<string, ReturnType<typeof createSignalingChannel>>>(new Map());
+
   const audioCall = useAudioCall(callId, "visitor");
   const videoCall = useVideoCall(callId, "visitor");
   const { playDialTone, stopDialTone } = useCallSounds();
@@ -116,101 +145,60 @@ export function CallClient({
     dialToneCallIdRef.current = null;
   }, [stopDialTone]);
 
-  // Handle audio call initiation
+  // Handle audio call initiation - iniciar WebRTC quando há chamada criada
   useEffect(() => {
     // Only proceed if intent is audio and we have a call ID
     if (intent !== "audio" || !currentCall?.id) {
-      // Se não estamos mais em modo audio, limpar o ref
-      if (intent !== "audio") {
-        dialToneCallIdRef.current = null;
-      }
-      return;
-    }
-
-    // Don't initiate call if it was ended by resident
-    if (callEndedByResident) {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SmartBell] Call was ended by resident, not initiating new call");
-      }
-      setIntent("idle");
-      // Force stop dial tone if somehow it's still playing
-      stopDialToneSafely();
-      dialToneCallIdRef.current = null;
-      return;
-    }
-    
-    // Also prevent initiating if call was connected and is now idle (resident ended)
-    if (wasConnected && audioState === "idle") {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SmartBell] Call was ended by resident (wasConnected + idle), not initiating");
-      }
-      setIntent("idle");
-      stopDialToneSafely();
-      dialToneCallIdRef.current = null;
       return;
     }
 
     const callId = currentCall.id;
-    if (!callId) {
+    const localCall = callState.getCall(callId);
+    
+    // Não iniciar se chamada foi encerrada pelo morador
+    if (callEndedByResident || (localCall && localCall.state === "ended")) {
+      setIntent("idle");
+      stopDialToneSafely();
+      return;
+    }
+    
+    // Não iniciar se já está conectado ou se foi encerrada
+    if (wasConnected && audioState === "idle") {
+      setIntent("idle");
+      stopDialToneSafely();
       return;
     }
 
     // Se já iniciamos o dial tone para esta chamada, não reiniciar
     if (dialToneCallIdRef.current === callId) {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SmartBell] Dial tone already started for this call, skipping");
-      }
       return;
     }
 
     let cancelled = false;
-    let dialToneStarted = false;
     
     // Marcar que iniciamos o dial tone para esta chamada
     dialToneCallIdRef.current = callId;
     
-    // Tocar tom de chamada quando iniciar chamada de áudio
-    // IMPORTANTE: Tocar ANTES de iniciar a chamada para garantir que comece imediatamente
-    if (playDialTone && typeof playDialTone === "function") {
-      try {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[SmartBell] Starting dial tone for call", callId);
-        }
-        playDialTone();
-        dialToneStarted = true;
-      } catch (err) {
-        if (process.env.NODE_ENV === "development") {
-          console.error("[SmartBell] Error starting dial tone", err);
-        }
-      }
-    }
-    
     (async () => {
       try {
+        // Iniciar WebRTC
         await initiateAudioCall(callId);
         if (!cancelled) {
-          setIntent("audio-active");
+          // Estado será atualizado quando receber call.accept
         }
       } catch (error) {
-        // Parar dial tone apenas em caso de erro
-        if (dialToneStarted) {
-          try {
-            stopDialToneSafely();
-          } catch {
-            // Ignore errors
-          }
-        }
+        console.error("[CallClient] Error initiating audio call", error);
         if (!cancelled) {
           setIntent("idle");
+          stopDialToneSafely();
         }
       }
     })();
     
     return () => {
       cancelled = true;
-      // NÃO parar dial tone aqui - deixar o useEffect de audioState cuidar disso
     };
-  }, [intent, currentCall?.id, initiateAudioCall, playDialTone, stopDialTone, callEndedByResident, wasConnected, audioState]);
+  }, [intent, currentCall?.id, initiateAudioCall, callState, callEndedByResident, wasConnected, audioState, stopDialToneSafely]);
 
   // Handle video call initiation
   useEffect(() => {
@@ -314,13 +302,32 @@ export function CallClient({
     }
   }, [audioState, intent, wasConnected, callEndedByResident, stopDialToneSafely]);
 
-  // Track when call was connected
+  // Processar eventos call.accept quando recebidos - atualizar estado para "in_call"
   useEffect(() => {
-    if (audioState === "connected" || videoState === "connected") {
+    if (callId) {
+      const localCall = callState.getCall(callId);
+      if (localCall && localCall.state === "in_call") {
+        // Chamada foi aceita - parar dial tone e atualizar UI
+        stopDialToneSafely();
+        setWasConnected(true);
+        setCallEndedByResident(false);
+        setIntent("audio-active");
+      }
+    }
+  }, [callId, callState, stopDialToneSafely]);
+
+  // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
+  useEffect(() => {
+    if (callId && (audioState === "connected" || videoState === "connected")) {
+      const localCall = callState.getCall(callId);
+      if (localCall && localCall.state !== "in_call") {
+        callState.updateCallState(callId, "in_call");
+      }
       setWasConnected(true);
       setCallEndedByResident(false); // Reset when new call connects
+      stopDialToneSafely();
     }
-  }, [audioState, videoState]);
+  }, [callId, audioState, videoState, callState, stopDialToneSafely]);
 
   // Reset intent when calls end - detect when resident ends call
   useEffect(() => {
@@ -352,16 +359,20 @@ export function CallClient({
     if (intent === "video-active" && videoState === "idle") {
       // If call was connected and now is idle, it was ended by resident
       if (wasConnected) {
+        // Limpar estado local se houver callId
+        if (callId) {
+          callState.cleanupCall(callId);
+        }
+        
         setCallEndedByResident(true);
         setStatusMessage("Chamada encerrada pelo morador.");
         setIntent("idle");
-        // Don't reset wasConnected immediately - let the card show
       } else {
         // Call ended but wasn't connected (maybe error or visitor ended)
         setIntent("idle");
       }
     }
-  }, [intent, videoState, wasConnected]);
+  }, [intent, videoState, wasConnected, callId, callState]);
 
   // Update status based on connection state
   useEffect(() => {
@@ -373,6 +384,17 @@ export function CallClient({
       }
     }
   }, [audioState, intent, videoState, currentCall, wasConnected]);
+
+  // Cleanup ao desmontar componente
+  useEffect(() => {
+    return () => {
+      // Limpar todos os canais de sinalização
+      signalingChannelsRef.current.forEach(({ channel }) => {
+        channel.unsubscribe();
+      });
+      signalingChannelsRef.current.clear();
+    };
+  }, []);
 
   // Listen to call updates
   useEffect(() => {
@@ -588,15 +610,119 @@ export function CallClient({
     [ensureCall, house.id]
   );
 
+  /**
+   * Handler para eventos de sinalização recebidos
+   */
+  const handleSignalingEvent = useCallback((event: SignalingEvent) => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[CallClient] Received signaling event: ${event.type} for call ${event.callId}`);
+    }
+    
+    // Processar evento através do hook de estado
+    callState.handleSignalingEvent(event);
+    
+    // Atualizar UI baseado no estado
+    const localCall = callState.getCall(event.callId);
+    if (localCall) {
+      if (localCall.state === "in_call") {
+        // Chamada aceita
+        setWasConnected(true);
+        setIntent("audio-active");
+        stopDialToneSafely();
+      } else if (localCall.state === "ended") {
+        // Chamada encerrada
+        setCallEndedByResident(true);
+        setIntent("idle");
+        stopDialToneSafely();
+      }
+    }
+    
+    // Processar eventos específicos
+    if (event.type === "call.reject") {
+      // Chamada rejeitada
+      stopDialToneSafely();
+      setStatusMessage("Chamada recusada pelo morador.");
+      setIntent("idle");
+    } else if (event.type === "call.hangup") {
+      // Chamada encerrada pelo morador
+      stopDialToneSafely();
+      setCallEndedByResident(true);
+      setStatusMessage("Chamada encerrada pelo morador.");
+      setIntent("idle");
+    }
+  }, [callState, stopDialToneSafely]);
+
+  /**
+   * Configurar canal de sinalização para uma chamada
+   */
+  const setupSignalingChannel = useCallback((callId: string, residentId: string) => {
+    // Se já existe canal, não criar novamente
+    if (signalingChannelsRef.current.has(callId)) {
+      return;
+    }
+
+    const { channel } = createSignalingChannel(callId);
+    
+    // Subscrever eventos
+    const unsubscribe = subscribeToSignalingEvents(channel, handleSignalingEvent);
+    
+    // Subscrever canal
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[CallClient] Subscribed to signaling channel for call ${callId}`);
+        }
+        
+        // Enviar call.request após subscrever
+        sendSignalingEvent(
+          channel,
+          createSignalingEvent.request(callId, visitorIdRef.current, residentId)
+        ).catch(console.error);
+      }
+    });
+
+    signalingChannelsRef.current.set(callId, { channel });
+    
+    // Cleanup ao desmontar
+    return () => {
+      unsubscribe();
+      channel.unsubscribe();
+      signalingChannelsRef.current.delete(callId);
+    };
+  }, [handleSignalingEvent]);
+
   const handleRequestVoiceCall = useCallback(() => {
     // Reset call ended state when starting a new call
     setCallEndedByResident(false);
     setWasConnected(false);
     startCalling(async () => {
-      const call = await ensureCall("audio");
-      setIntent("audio");
+      try {
+        // Criar chamada no banco
+        const call = await ensureCall("audio");
+        
+        // Criar estado local com callId
+        const localCall = callState.createCall(call.id, house.owner_id);
+        
+        // Configurar canal de sinalização e enviar call.request
+        setupSignalingChannel(call.id, house.owner_id);
+        
+        // Configurar timeout de 30s
+        callState.setCallTimeout(call.id, 30000);
+        
+        // Iniciar dial tone
+        if (playDialTone) {
+          playDialTone();
+          dialToneCallIdRef.current = call.id;
+        }
+        
+        setIntent("audio");
+      } catch (error) {
+        console.error("[CallClient] Error initiating call", error);
+        setStatusMessage("Falha ao iniciar a chamada.");
+        setIntent("idle");
+      }
     });
-  }, [ensureCall]);
+  }, [ensureCall, callState, house.owner_id, setupSignalingChannel, playDialTone]);
 
   const handleRequestVideoCall = useCallback(() => {
     startCalling(async () => {
@@ -751,12 +877,31 @@ export function CallClient({
                 call={currentCall}
                 state={audioState}
                 onHangup={async () => {
-                  await hangupAudioCall();
-                  setIntent("idle");
-                  setWasConnected(false);
-                  setCallEndedByResident(false); // Visitor ended, not resident
-                  // Note: Status update is handled by resident when they detect hangup
-                  // or via Realtime when call status changes
+                  if (!callId) return;
+                  
+                  try {
+                    // Encerrar via WebRTC
+                    await hangupAudioCall();
+                    
+                    // Enviar evento call.hangup via sinalização
+                    const channel = signalingChannelsRef.current.get(callId);
+                    if (channel && currentCall) {
+                      await sendSignalingEvent(
+                        channel.channel,
+                        createSignalingEvent.hangup(callId, visitorIdRef.current, house.owner_id, "user_end")
+                      );
+                    }
+                    
+                    // Limpar estado local
+                    callState.cleanupCall(callId);
+                    
+                    setIntent("idle");
+                    setWasConnected(false);
+                    setCallEndedByResident(false); // Visitor ended, not resident
+                    stopDialToneSafely();
+                  } catch (error) {
+                    console.error("[CallClient] Error hanging up", error);
+                  }
                 }}
                 remoteStream={audioRemoteStream}
               />
