@@ -34,6 +34,14 @@ import { saveFcmToken, signOut, updateCallStatus } from "@/app/dashboard/actions
 import { useAudioCall } from "@/hooks/useAudioCall";
 import { useVideoCall } from "@/hooks/useVideoCall";
 import { useCallSounds } from "@/hooks/useCallSounds";
+import { useCallState } from "@/hooks/useCallState";
+import { 
+  createSignalingChannel, 
+  sendSignalingEvent, 
+  subscribeToSignalingEvents,
+  createSignalingEvent 
+} from "@/lib/call-signaling";
+import type { SignalingEvent } from "@/types/call-signaling";
 
 type DashboardCall = Call & { house: House };
 
@@ -126,210 +134,143 @@ export function DashboardClient({
     return values;
   }, [callMap]);
 
-  // Find calls with pending audio offers
-  const incomingAudioCalls = useMemo(() => {
-    return Object.values(callMap).filter(
-      (call) => call.status === "pending" && call.type === "audio"
-    );
-  }, [callMap]);
+  // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
+  const callState = useCallState({
+    userId: profile.id,
+    role: "callee",
+    onStateChange: (callId, newState) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[DashboardClient] Call ${callId} state changed to ${newState}`);
+      }
+    }
+  });
 
-  // Track if we're currently ringing for a call
-  const [ringingCallId, setRingingCallId] = useState<string | null>(null);
-  
-  // Track which call should show the modal (most recent incoming audio call with pending offer)
-  const [incomingCallModalCallId, setIncomingCallModalCallId] = useState<string | null>(null);
+  // Refs para canais de sinalização (um por callId)
+  const signalingChannelsRef = useRef<Map<string, ReturnType<typeof createSignalingChannel>>>(new Map());
 
-  // Extract selected call properties to avoid object reference changes
+  // Obter chamada ativa (ringing ou in_call) para mostrar no modal - ESTADO DETERMINÍSTICO
+  const activeIncomingCall = useMemo(() => {
+    const activeCalls = callState.getActiveCalls();
+    // Priorizar chamadas com estado "ringing"
+    const ringingCall = activeCalls.find(call => call.state === "ringing");
+    if (ringingCall) {
+      const dbCall = callMap[ringingCall.callId];
+      return dbCall || null;
+    }
+    return null;
+  }, [callState, callMap]);
+
+  // Verificar se há chamada ativa (in_call) - para mostrar overlay
+  const hasActiveCall = useMemo(() => {
+    const activeCalls = callState.getActiveCalls();
+    return activeCalls.some(call => call.state === "in_call");
+  }, [callState]);
+
+  // Extract selected call properties
   const selectedCallIdValue = selectedCall?.id;
   const selectedCallStatus = selectedCall?.status;
   const selectedCallType = selectedCall?.type;
 
-  // Use refs to track previous values and avoid unnecessary updates
-  const prevAudioStateForModalRef = useRef(audioState);
-  const prevSelectedCallStatusRef = useRef(selectedCallStatus);
-  const prevIncomingCallModalCallIdRef = useRef(incomingCallModalCallId);
-
-  // Track previous audioPendingOffer to detect when it changes
-  const prevAudioPendingOfferRef = useRef(audioPendingOffer);
-
-  // Play ring tone and show modal when there's an incoming audio call
-  useEffect(() => {
-    // Check if call is active FIRST (answered AND connected, or ended)
-    // This must be checked BEFORE any other logic to prevent modal from reopening
-    const callIsActive = (selectedCallStatus === "answered" && audioState === "connected") || selectedCallStatus === "ended";
+  /**
+   * Handler para eventos de sinalização recebidos
+   */
+  const handleSignalingEvent = useCallback((event: SignalingEvent) => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[DashboardClient] Received signaling event: ${event.type} for call ${event.callId}`);
+    }
     
-    // CRITICAL: If call is active, always close modal and return early - prevent any reopening
-    if (callIsActive) {
-      if (incomingCallModalCallId) {
-        setIncomingCallModalCallId(null);
-        stopRingTone();
-        setRingingCallId(null);
+    // Processar evento através do hook de estado
+    const rejectEvent = callState.handleSignalingEvent(event);
+    
+    // Se retornou evento de rejeição (usuário ocupado), enviar
+    if (rejectEvent && rejectEvent.type === "call.reject") {
+      const channel = signalingChannelsRef.current.get(event.callId);
+      if (channel) {
+        sendSignalingEvent(channel.channel, rejectEvent).catch(console.error);
       }
-      // Update refs before returning
-      prevAudioStateForModalRef.current = audioState;
-      prevSelectedCallStatusRef.current = selectedCallStatus;
-      prevIncomingCallModalCallIdRef.current = null;
-      prevAudioPendingOfferRef.current = audioPendingOffer;
-      return;
     }
-    
-    // Skip if nothing changed
-    const audioStateChanged = prevAudioStateForModalRef.current !== audioState;
-    const statusChanged = prevSelectedCallStatusRef.current !== selectedCallStatus;
-    const modalIdChanged = prevIncomingCallModalCallIdRef.current !== incomingCallModalCallId;
-    const offerChanged = prevAudioPendingOfferRef.current !== audioPendingOffer;
-    
-    // Always run if offer changed (to enable/disable button)
-    if (!audioStateChanged && !statusChanged && !modalIdChanged && !offerChanged && 
-        audioPendingOffer === null && selectedCallStatus !== "pending") {
+  }, [callState]);
+
+  /**
+   * Configurar canal de sinalização para uma chamada
+   */
+  const setupSignalingChannel = useCallback((callId: string) => {
+    // Se já existe canal, não criar novamente
+    if (signalingChannelsRef.current.has(callId)) {
       return;
     }
 
-    // Update refs
-    prevAudioStateForModalRef.current = audioState;
-    prevSelectedCallStatusRef.current = selectedCallStatus;
-    prevIncomingCallModalCallIdRef.current = incomingCallModalCallId;
-    prevAudioPendingOfferRef.current = audioPendingOffer;
-
-    // CRITICAL: Don't show/hide modal if call is already connected (overlay will handle it)
-    // Also don't show if call is ended
-    if (audioState === "connected" || selectedCallStatus === "ended") {
-      // If connected or ended, close modal immediately (only if it's for this call)
-      if (incomingCallModalCallId === selectedCallIdValue) {
-        setIncomingCallModalCallId(null);
-        stopRingTone();
-        setRingingCallId(null);
-      }
-      return;
-    }
+    const { channel } = createSignalingChannel(callId);
     
-    // If status is "answered" but not yet connected, keep modal open but stop ring tone
-    if (selectedCallStatus === "answered" && audioState !== "connected") {
-      // Stop ring tone but keep modal open until connection is established
-      if (ringingCallId === selectedCallIdValue) {
-        stopRingTone();
-        setRingingCallId(null);
-      }
-      // Don't set incomingCallModalCallId here - keep it as is if already set
-      return;
-    }
+    // Subscrever eventos
+    const unsubscribe = subscribeToSignalingEvents(channel, handleSignalingEvent);
     
-    // Show modal ONLY if:
-    // 1. Selected call is an audio call with pending status
-    // 2. AND call is not active (not answered+connected, not ended)
-    const selectedCallIsPendingAudio = selectedCallStatus === "pending" && selectedCallType === "audio";
-    const hasPendingOffer = audioPendingOffer !== null;
-
-    // Show modal when there's a pending audio call
-    if (selectedCallIsPendingAudio && selectedCallIdValue) {
-      const callToRing = selectedCallIdValue;
-      
-      // Set ringing call ID and show modal (only if not already set)
-      if (callToRing !== ringingCallId) {
-        setRingingCallId(callToRing);
-        // Only play ring tone when we have an offer (visitor has initiated the call)
-        if (hasPendingOffer) {
-          playRingTone();
+    // Subscrever canal
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[DashboardClient] Subscribed to signaling channel for call ${callId}`);
         }
       }
-      // Show modal for the incoming call - only set if different
-      if (callToRing !== incomingCallModalCallId) {
-        setIncomingCallModalCallId(callToRing);
-      }
-      // If we have an offer but ring tone isn't playing yet, start it
-      if (hasPendingOffer && callToRing === incomingCallModalCallId && callToRing !== ringingCallId) {
-        setRingingCallId(callToRing);
-        playRingTone();
-      }
-    } 
-    // Hide modal if call is not pending
-    else if (!selectedCallIsPendingAudio && incomingCallModalCallId) {
-      // Only hide if it's for this call or a different call
-      if (incomingCallModalCallId === selectedCallIdValue || incomingCallModalCallId !== selectedCallIdValue) {
-        // But don't hide if status is "answered" and not yet connected (keep it open)
-        if (!(selectedCallStatus === "answered" && audioState !== "connected")) {
-          setIncomingCallModalCallId(null);
-          stopRingTone();
-          setRingingCallId(null);
+    });
+
+    signalingChannelsRef.current.set(callId, { channel });
+    
+    // Cleanup ao desmontar
+    return () => {
+      unsubscribe();
+      channel.unsubscribe();
+      signalingChannelsRef.current.delete(callId);
+    };
+  }, [handleSignalingEvent]);
+
+  /**
+   * Quando uma nova chamada pendente é detectada, configurar sinalização e processar como call.request
+   */
+  useEffect(() => {
+    Object.values(callMap).forEach((call) => {
+      if (call.status === "pending" && call.type === "audio") {
+        setupSignalingChannel(call.id);
+        
+        // Se é uma nova chamada, processar como call.request
+        const localCall = callState.getCall(call.id);
+        if (!localCall) {
+          // Simular evento call.request (vindo do visitante)
+          handleSignalingEvent({
+            type: "call.request",
+            callId: call.id,
+            from: call.session_id || "visitor",
+            to: profile.id,
+            timestamp: Date.now()
+          });
         }
       }
-    }
-  }, [audioPendingOffer, selectedCallIdValue, selectedCallStatus, selectedCallType, ringingCallId, incomingCallModalCallId, audioState, playRingTone, stopRingTone]);
+    });
+  }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel]);
 
-  // Stop ring tone and hide modal when call is answered or connected
+  /**
+   * Tocar ring tone quando há chamada ringing E há offer pendente
+   */
   useEffect(() => {
-    // Check if call is active FIRST
-    const callIsActive = (selectedCallStatus === "answered" && audioState === "connected") || selectedCallStatus === "ended";
+    const ringingCall = callState.getActiveCalls().find(call => call.state === "ringing");
     
-    // CRITICAL: If call is active, always close modal
-    if (callIsActive && incomingCallModalCallId) {
-      setIncomingCallModalCallId(null);
+    if (ringingCall && audioPendingOffer && ringingCall.callId === selectedCallIdValue) {
+      // Tocar ring tone apenas se há offer pendente (visitante iniciou WebRTC)
+      playRingTone();
+    } else {
       stopRingTone();
-      setRingingCallId(null);
-      return;
     }
-    
-    // Only run if audioState changed
-    if (prevAudioStateForModalRef.current === audioState) return;
-    
-    if (audioState === "connected") {
-      // Only update if there's something to clear
-      if (ringingCallId || incomingCallModalCallId === selectedCallIdValue) {
-        stopRingTone();
-        setRingingCallId(null);
-        if (incomingCallModalCallId === selectedCallIdValue) {
-          setIncomingCallModalCallId(null);
-        }
-      }
-    } else if (audioState === "idle") {
-      // Only clear if not answered/ended and modal is showing for this call
-      if (selectedCallStatus !== "answered" && selectedCallStatus !== "ended" && incomingCallModalCallId === selectedCallIdValue) {
-        stopRingTone();
-        setRingingCallId(null);
-        setIncomingCallModalCallId(null);
+  }, [callState, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
+
+  // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
+  useEffect(() => {
+    if (selectedCallId && audioState === "connected") {
+      const localCall = callState.getCall(selectedCallId);
+      if (localCall && localCall.state !== "in_call") {
+        callState.updateCallState(selectedCallId, "in_call");
       }
     }
-  }, [audioState, selectedCallIdValue, selectedCallStatus, incomingCallModalCallId, ringingCallId]);
-
-  // Stop ring tone and hide modal when call status changes to answered or missed
-  useEffect(() => {
-    if (!selectedCallIdValue) return;
-    
-    // Check if call is active FIRST
-    const callIsActive = (selectedCallStatus === "answered" && audioState === "connected") || selectedCallStatus === "ended";
-    
-    // CRITICAL: If call is active, always close modal
-    if (callIsActive && incomingCallModalCallId) {
-      setIncomingCallModalCallId(null);
-      stopRingTone();
-      setRingingCallId(null);
-      return;
-    }
-    
-    // Only run if status changed
-    if (prevSelectedCallStatusRef.current === selectedCallStatus) return;
-    
-    const shouldCloseModal = 
-      (ringingCallId === selectedCallIdValue || incomingCallModalCallId === selectedCallIdValue);
-    
-    if (selectedCallStatus === "missed" && shouldCloseModal) {
-      // Always close modal for missed calls
-      stopRingTone();
-      setRingingCallId(null);
-      setIncomingCallModalCallId(null);
-    } else if (selectedCallStatus === "answered" && shouldCloseModal) {
-      // DON'T close modal when status changes to answered - wait for connection
-      // Only stop ring tone, but keep modal open until audioState becomes "connected"
-      stopRingTone();
-      setRingingCallId(null);
-      // Keep modal open - it will close when audioState becomes "connected" (via other useEffect)
-    } else if (selectedCallStatus === "ended" && shouldCloseModal) {
-      // Close modal for ended calls
-      stopRingTone();
-      setRingingCallId(null);
-      setIncomingCallModalCallId(null);
-    }
-  }, [selectedCallStatus, selectedCallIdValue, ringingCallId, incomingCallModalCallId, stopRingTone, audioState]);
+  }, [selectedCallId, audioState, callState]);
 
   // Track previous connection state to detect when call ends
   const prevAudioStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
@@ -622,7 +563,8 @@ export function DashboardClient({
     const isNowIdle = audioState === "idle" && videoState === "idle";
     
     if (selectedCall.status === "answered" && (wasAudioConnected || wasVideoConnected) && isNowIdle) {
-      // Call was ended - update status to "ended"
+      // Call was ended - limpar estado local e atualizar status no banco
+      callState.cleanupCall(selectedCall.id);
       handleUpdateStatus("ended").catch((error) => {
         console.error("[SmartBell] Error updating call status to ended", error);
       });
@@ -666,58 +608,78 @@ export function DashboardClient({
     }
   }, []);
   const handleAcceptAudioCall = useCallback(async () => {
-    if (!selectedCallId) {
-      console.error("[SmartBell] No selected call ID");
-      return;
-    }
-    
-    // Check if we have a pending offer before accepting
-    if (!audioPendingOffer) {
-      console.warn("[SmartBell] No pending offer yet, waiting...");
-      // Show a message to user that we're waiting for the call to be initiated
+    const callToAccept = activeIncomingCall?.id || selectedCallId;
+    if (!callToAccept || !audioPendingOffer) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[SmartBell] Cannot accept call: no call or pending offer", {
+          callToAccept,
+          hasPendingOffer: !!audioPendingOffer
+        });
+      }
       alert("Aguardando o visitante iniciar a chamada...");
       return;
     }
-    
-    stopRingTone();
-    setRingingCallId(null);
-    // Don't clear incomingCallModalCallId immediately - let it close when connected
-    // This prevents the modal from disappearing before the overlay appears
+
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SmartBell] Accepting audio call", selectedCallId);
+      // Selecionar chamada se não estiver selecionada
+      if (callToAccept !== selectedCallId) {
+        setSelectedCallId(callToAccept);
       }
-      // Set a flag to keep modal open during accept process
+      
+      // Aceitar via WebRTC
       await acceptAudioCall();
-      await updateCallStatus(selectedCallId, "answered");
-      // Modal will close automatically when audioState becomes "connected" (via useEffect)
-      // Don't clear incomingCallModalCallId here - let the useEffect handle it
+      
+      // Atualizar estado local para "in_call"
+      callState.updateCallState(callToAccept, "in_call");
+      
+      // Enviar evento call.accept via sinalização
+      const channel = signalingChannelsRef.current.get(callToAccept);
+      const call = callMap[callToAccept];
+      if (channel && call) {
+        await sendSignalingEvent(
+          channel.channel,
+          createSignalingEvent.accept(callToAccept, profile.id, call.session_id || "visitor")
+        );
+      }
+      
+      // Atualizar status no banco
+      await updateCallStatus(callToAccept, "answered");
+      
+      // Parar ring tone
+      stopRingTone();
     } catch (error) {
       console.error("[SmartBell] Error accepting call", error);
-      // If error, clear modal
-      setIncomingCallModalCallId(null);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [acceptAudioCall, selectedCallId, audioPendingOffer, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile.id, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
-    stopRingTone();
-    setRingingCallId(null);
-    setIncomingCallModalCallId(null);
-    // Select the call if not already selected
-    const callToReject = incomingCallModalCallId || selectedCallId;
-    if (callToReject) {
-      try {
-        await updateCallStatus(callToReject, "missed");
-        // If rejecting a different call, select it first
-        if (callToReject !== selectedCallId) {
-          setSelectedCallId(callToReject);
-        }
-      } catch (error) {
-        console.error(error);
+    const callToReject = activeIncomingCall?.id || selectedCallId;
+    if (!callToReject) return;
+
+    try {
+      // Enviar evento call.reject via sinalização
+      const channel = signalingChannelsRef.current.get(callToReject);
+      const call = callMap[callToReject];
+      if (channel && call) {
+        await sendSignalingEvent(
+          channel.channel,
+          createSignalingEvent.reject(callToReject, profile.id, call.session_id || "visitor", "user_reject")
+        );
       }
+      
+      // Limpar estado local
+      callState.cleanupCall(callToReject);
+      
+      // Atualizar status no banco
+      await updateCallStatus(callToReject, "missed");
+      
+      // Parar ring tone
+      stopRingTone();
+    } catch (error) {
+      console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [incomingCallModalCallId, selectedCallId]);
+  }, [activeIncomingCall, selectedCallId, callState, profile.id, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -729,11 +691,7 @@ export function DashboardClient({
     }
   }, [acceptVideoCall, selectedCallId]);
 
-  // Get the call for the modal - ensure we select the correct call when accepting
-  const incomingCallModalCall = incomingCallModalCallId ? callMap[incomingCallModalCallId] : null;
-  
-  // When accepting from modal, use the standard accept handler
-  // (the call is already selected when modal shows)
+  // Handler para aceitar do modal
   const handleModalAccept = useCallback(async () => {
     if (process.env.NODE_ENV === "development") {
       console.log("[SmartBell] handleModalAccept called");
@@ -745,17 +703,16 @@ export function DashboardClient({
     }
   }, [handleAcceptAudioCall]);
 
-  // Check if there's an active audio call
-  const hasActiveCall = selectedCall?.type === "audio" && audioState === "connected";
-  
-  // CRITICAL: Ensure modal is closed when call is active
+  // Cleanup ao desmontar componente
   useEffect(() => {
-    if (hasActiveCall && incomingCallModalCallId) {
-      setIncomingCallModalCallId(null);
-      stopRingTone();
-      setRingingCallId(null);
-    }
-  }, [hasActiveCall, incomingCallModalCallId, stopRingTone]);
+    return () => {
+      // Limpar todos os canais de sinalização
+      signalingChannelsRef.current.forEach(({ channel }) => {
+        channel.unsubscribe();
+      });
+      signalingChannelsRef.current.clear();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
@@ -766,39 +723,46 @@ export function DashboardClient({
           audioState={audioState}
           remoteStream={audioRemoteStream}
           onHangup={async () => {
-            await hangupAudioCall();
-            // If call was answered (connected), mark as ended when hanging up
-            if (selectedCall?.status === "answered") {
-              await handleUpdateStatus("ended");
+            if (!selectedCallId) return;
+            
+            try {
+              // Encerrar via WebRTC
+              await hangupAudioCall();
+              
+              // Enviar evento call.hangup via sinalização
+              const channel = signalingChannelsRef.current.get(selectedCallId);
+              const call = callMap[selectedCallId];
+              if (channel && call) {
+                await sendSignalingEvent(
+                  channel.channel,
+                  createSignalingEvent.hangup(selectedCallId, profile.id, call.session_id || "visitor", "user_end")
+                );
+              }
+              
+              // Limpar estado local
+              callState.cleanupCall(selectedCallId);
+              
+              // Atualizar status no banco
+              if (selectedCall?.status === "answered") {
+                await handleUpdateStatus("ended");
+              }
+            } catch (error) {
+              console.error("[SmartBell] Error hanging up", error);
             }
           }}
         />
       )}
 
-      {/* Incoming Call Modal */}
-      {/* Show modal when there's an incoming call ID set AND call is not yet connected */}
-      {/* Keep modal open until connection is established to prevent flicker */}
-      {process.env.NODE_ENV === "development" && (
-        <div style={{ position: "fixed", top: 0, right: 0, background: "red", color: "white", padding: "10px", zIndex: 99999 }}>
-          Debug: incomingCallModalCallId={incomingCallModalCallId}, incomingCallModalCall={incomingCallModalCall ? "exists" : "null"}, audioState={audioState}, open={!!incomingCallModalCall && audioState !== "connected"}
-        </div>
+      {/* Incoming Call Modal - Baseado em estado determinístico */}
+      {activeIncomingCall && callState.getCall(activeIncomingCall.id)?.state === "ringing" && (
+        <IncomingCallModal
+          call={activeIncomingCall}
+          open={true}
+          onAccept={handleModalAccept}
+          onReject={handleRejectAudioCall}
+          hasPendingOffer={!!audioPendingOffer && activeIncomingCall.id === selectedCallIdValue}
+        />
       )}
-      <IncomingCallModal
-        call={incomingCallModalCall}
-        open={
-          !!incomingCallModalCall && 
-          !!incomingCallModalCallId &&
-          // CRITICAL: Never show if call is active (answered AND connected)
-          !(selectedCallStatus === "answered" && audioState === "connected") &&
-          // Never show if call is ended
-          selectedCallStatus !== "ended" &&
-          // Only show modal if status is pending OR (answered but not yet connected)
-          (selectedCallStatus === "pending" || (selectedCallStatus === "answered" && audioState !== "connected"))
-        }
-        onAccept={handleModalAccept}
-        onReject={handleRejectAudioCall}
-        hasPendingOffer={!!audioPendingOffer}
-      />
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
@@ -955,20 +919,20 @@ export function DashboardClient({
                             "w-full flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors text-left",
                             selectedCallId === call.id && "border-primary bg-primary/5",
                             selectedCallId === call.id && call.type === "audio" && audioState === "connected" && "border-green-500 bg-green-500/5",
-                            call.status === "pending" && call.type === "audio" && ringingCallId === call.id && "border-green-500 bg-green-500/10 animate-pulse",
+                            call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" && "border-green-500 bg-green-500/10 animate-pulse",
                             call.status === "pending" && "border-yellow-500/50 bg-yellow-500/5"
                           )}
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn(
                               "h-10 w-10 rounded-full flex items-center justify-center",
-                              call.status === "pending" && call.type === "audio" && ringingCallId === call.id
+                              call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing"
                                 ? "bg-green-500/20 animate-pulse"
                                 : selectedCallId === call.id && call.type === "audio" && audioState === "connected"
                                 ? "bg-green-500/20"
                                 : "bg-primary/10"
                             )}>
-                              {call.status === "pending" && call.type === "audio" && ringingCallId === call.id ? (
+                              {call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" ? (
                                 <PhoneIncoming className="h-5 w-5 text-green-500 animate-pulse" />
                               ) : selectedCallId === call.id && call.type === "audio" && audioState === "connected" ? (
                                 <Phone className="h-5 w-5 text-green-500" />
@@ -979,7 +943,7 @@ export function DashboardClient({
                             <div>
                               <p className="font-medium flex items-center gap-2">
                                 {call.house.name}
-                                {call.status === "pending" && call.type === "audio" && ringingCallId === call.id && (
+                                {call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" && (
                                   <span className="text-xs text-green-500 font-semibold animate-pulse">
                                     🔔 TOCANDO
                                   </span>
