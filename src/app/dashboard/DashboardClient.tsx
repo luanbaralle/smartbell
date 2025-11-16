@@ -141,8 +141,9 @@ export function DashboardClient({
   }, [callMap]);
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
+  // Garantir que profile.id existe antes de usar
   const callState = useCallState({
-    userId: profile.id,
+    userId: profile?.id || "",
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
@@ -229,12 +230,12 @@ export function DashboardClient({
     // Detectar quando visitante encerra a chamada
     // Verificar se foi o visitante que encerrou (from !== profile.id)
     if (event.type === "call.hangup") {
-      const isFromResident = event.from === profile.id;
+      const isFromResident = event.from === profile?.id;
       
       if (process.env.NODE_ENV === "development") {
         console.log(`[DashboardClient] Processing call.hangup event`, {
           from: event.from,
-          profileId: profile.id,
+          profileId: profile?.id || "",
           isFromResident,
           callEndedByResident,
           callEndedByVisitor
@@ -318,14 +319,14 @@ export function DashboardClient({
               type: "call.request",
               callId: call.id,
               from: call.session_id || "visitor",
-              to: profile.id,
+              to: profile?.id || "",
               timestamp: Date.now()
             });
           }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
-  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile?.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -380,6 +381,8 @@ export function DashboardClient({
   const prevVideoStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
 
   useEffect(() => {
+    if (!profile?.id) return;
+    
     const { supabase, channel } = createRealtimeChannel(
       `dashboard-calls:${profile.id}`
     );
@@ -585,7 +588,7 @@ export function DashboardClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             callId: selectedCallId,
-            sender: profile.id,
+            sender: profile?.id || "",
             content
           })
         });
@@ -598,7 +601,7 @@ export function DashboardClient({
         setIsSending(false);
       }
     },
-    [profile.id, selectedCallId]
+    [profile?.id, selectedCallId]
   );
 
   const handleQuickReply = useCallback(
@@ -638,7 +641,7 @@ export function DashboardClient({
         })
       });
     },
-    [callMap, profile.id, selectedCallId]
+    [callMap, profile?.id, selectedCallId]
   );
 
   const handleUpdateStatus = useCallback(
@@ -785,7 +788,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.accept(callToAccept, profile.id, call.session_id || "visitor")
+          createSignalingEvent.accept(callToAccept, profile?.id || "", call.session_id || "visitor")
         );
       }
       
@@ -798,7 +801,7 @@ export function DashboardClient({
       console.error("[SmartBell] Error accepting call", error);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile?.id, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
     const callToReject = activeIncomingCall?.id || selectedCallId;
@@ -811,7 +814,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.reject(callToReject, profile.id, call.session_id || "visitor", "user_reject")
+          createSignalingEvent.reject(callToReject, profile?.id || "", call.session_id || "visitor", "user_reject")
         );
       }
       
@@ -828,7 +831,7 @@ export function DashboardClient({
     } catch (error) {
       console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [activeIncomingCall, selectedCallId, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, callState, profile?.id, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -900,7 +903,7 @@ export function DashboardClient({
               if (channel && call) {
                 await sendSignalingEvent(
                   channel.channel,
-                  createSignalingEvent.hangup(selectedCallId, profile.id, call.session_id || "visitor", "user_end")
+                  createSignalingEvent.hangup(selectedCallId, profile?.id || "", call.session_id || "visitor", "user_end")
                 );
               }
               
