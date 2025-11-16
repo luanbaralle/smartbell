@@ -69,6 +69,16 @@ export function DashboardClient({
   // Profile já foi validado no page.tsx antes de renderizar este componente
   // Não precisamos validar novamente aqui para evitar problemas de hidratação
   
+  // Verificação de segurança adicional
+  if (!profile || !profile.id) {
+    console.error("[DashboardClient] Profile is missing or invalid:", profile);
+    return (
+      <div className="p-4">
+        <p className="text-red-500">Erro: Perfil não encontrado. Por favor, faça login novamente.</p>
+      </div>
+    );
+  }
+  
   const houseLookup = useMemo(() => {
     const map = new Map<string, House>();
     houses.forEach((house) => map.set(house.id, house));
@@ -141,9 +151,9 @@ export function DashboardClient({
   }, [callMap]);
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
-  // Garantir que profile.id existe antes de usar
+  // Garantir que profile.id existe antes de usar - se não existir, não inicializar o hook
   const callState = useCallState({
-    userId: profile?.id || "",
+    userId: profile?.id || "temp-user-id",
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
