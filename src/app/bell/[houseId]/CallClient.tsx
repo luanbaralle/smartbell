@@ -795,8 +795,8 @@ export function CallClient({
   const showChat = intent === "text" || (currentCall && currentCall.type === "text" && intent !== "audio-active" && intent !== "video-active");
   // Don't show audio call UI if call was ended by resident
   // Mostrar quando intent é "audio" (chamando) ou "audio-active" (conectado), ou quando audioState não é idle
-  const showAudioCall = (intent === "audio" || intent === "audio-active" || audioState !== "idle") && !callEndedByResident && !!currentCall;
-  const showVideoCall = (intent === "video-active" || videoState !== "idle") && !callEndedByResident;
+  const showAudioCall = (intent === "audio" || intent === "audio-active" || audioState !== "idle") && !callEndedByResident && !callEndedByVisitor && !!currentCall;
+  const showVideoCall = (intent === "video-active" || videoState !== "idle") && !callEndedByResident && !callEndedByVisitor;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
@@ -936,6 +936,11 @@ export function CallClient({
                   if (!callId) return;
                   
                   try {
+                    // Marcar que o visitante encerrou ANTES de fazer outras operações
+                    // Isso garante que o overlay apareça imediatamente
+                    setCallEndedByVisitor(true);
+                    setCallEndedByResident(false);
+                    
                     // Encerrar via WebRTC
                     await hangupAudioCall();
                     
@@ -953,11 +958,12 @@ export function CallClient({
                     
                     setIntent("idle");
                     setWasConnected(false);
-                    setCallEndedByResident(false); // Visitor ended, not resident
-                    setCallEndedByVisitor(true); // Visitor ended the call
                     stopDialToneSafely();
                   } catch (error) {
                     console.error("[CallClient] Error hanging up", error);
+                    // Em caso de erro, ainda mostrar o overlay
+                    setCallEndedByVisitor(true);
+                    setCallEndedByResident(false);
                   }
                 }}
                 remoteStream={audioRemoteStream}
