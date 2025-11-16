@@ -153,23 +153,41 @@ export function DashboardClient({
 
   // Obter chamada ativa (ringing ou in_call) para mostrar no modal - ESTADO DETERMINÍSTICO
   // Usar callsMap.size como dependência para evitar loops infinitos
+  // Converter Map para Array para usar como dependência estável
   const callsMapSize = callState.callsMap.size;
-  const activeIncomingCall = useMemo(() => {
-    const activeCalls = callState.getActiveCalls();
-    // Priorizar chamadas com estado "ringing"
-    const ringingCall = activeCalls.find(call => call.state === "ringing");
-    if (ringingCall) {
-      const dbCall = callMap[ringingCall.callId];
-      return dbCall || null;
+  const callsMapArray = useMemo(() => {
+    try {
+      return Array.from(callState.callsMap.values());
+    } catch (error) {
+      console.error("[DashboardClient] Error converting callsMap to array", error);
+      return [];
     }
-    return null;
-  }, [callsMapSize, callState.getActiveCalls, callMap]);
+  }, [callsMapSize]);
+  const activeIncomingCall = useMemo(() => {
+    try {
+      const activeCalls = callsMapArray.filter(call => call.state === "ringing" || call.state === "in_call");
+      // Priorizar chamadas com estado "ringing"
+      const ringingCall = activeCalls.find(call => call.state === "ringing");
+      if (ringingCall) {
+        const dbCall = callMap[ringingCall.callId];
+        return dbCall || null;
+      }
+      return null;
+    } catch (error) {
+      console.error("[DashboardClient] Error in activeIncomingCall", error);
+      return null;
+    }
+  }, [callsMapArray, callMap]);
 
   // Verificar se há chamada ativa (in_call) - para mostrar overlay
   const hasActiveCall = useMemo(() => {
-    const activeCalls = callState.getActiveCalls();
-    return activeCalls.some(call => call.state === "in_call");
-  }, [callsMapSize, callState.getActiveCalls]);
+    try {
+      return callsMapArray.some(call => call.state === "in_call");
+    } catch (error) {
+      console.error("[DashboardClient] Error in hasActiveCall", error);
+      return false;
+    }
+  }, [callsMapArray]);
 
   // Extract selected call properties
   const selectedCallIdValue = selectedCall?.id;
@@ -315,15 +333,20 @@ export function DashboardClient({
    * Tocar ring tone quando há chamada ringing E há offer pendente
    */
   useEffect(() => {
-    const ringingCall = callState.getActiveCalls().find(call => call.state === "ringing");
-    
-    if (ringingCall && audioPendingOffer && ringingCall.callId === selectedCallIdValue) {
-      // Tocar ring tone apenas se há offer pendente (visitante iniciou WebRTC)
-      playRingTone();
-    } else {
+    try {
+      const ringingCall = callsMapArray.find(call => call.state === "ringing");
+      
+      if (ringingCall && audioPendingOffer && ringingCall.callId === selectedCallIdValue) {
+        // Tocar ring tone apenas se há offer pendente (visitante iniciou WebRTC)
+        playRingTone();
+      } else {
+        stopRingTone();
+      }
+    } catch (error) {
+      console.error("[DashboardClient] Error in ring tone effect", error);
       stopRingTone();
     }
-  }, [callsMapSize, callState.getActiveCalls, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
+  }, [callsMapArray, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
 
   // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
   useEffect(() => {
@@ -333,7 +356,7 @@ export function DashboardClient({
         callState.updateCallState(selectedCallId, "in_call");
       }
     }
-  }, [selectedCallId, audioState, callsMapSize, callState.getCall, callState.updateCallState]);
+  }, [selectedCallId, audioState, callsMapArray, callState.getCall, callState.updateCallState]);
 
   // Track previous connection state to detect when call ends
   const prevAudioStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
