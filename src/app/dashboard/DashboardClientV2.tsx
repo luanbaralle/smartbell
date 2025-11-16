@@ -207,7 +207,7 @@ export function DashboardClientV2({
       }
     });
 
-    signalingChannelsRef.current.set(callId, { channel });
+    signalingChannelsRef.current.set(callId, { channel } as any);
     
     // Cleanup ao desmontar
     return () => {

@@ -18,9 +18,13 @@ export function QRDisplay({ house }: QRDisplayProps) {
 
   useEffect(() => {
     // Only set URL on client side to avoid hydration mismatch
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-                   (typeof window !== "undefined" ? window.location.origin : "");
-    setBellUrl(baseUrl ? `${baseUrl}/bell/${house.id}` : `/bell/${house.id}`);
+    // Use setTimeout to avoid synchronous setState in effect
+    const timer = setTimeout(() => {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                     (typeof window !== "undefined" ? window.location.origin : "");
+      setBellUrl(baseUrl ? `${baseUrl}/bell/${house.id}` : `/bell/${house.id}`);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [house.id]);
 
   const handleDownload = () => {

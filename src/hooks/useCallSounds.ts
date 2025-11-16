@@ -149,15 +149,16 @@ export function useCallSounds() {
               hasRef: !!dialToneOscillatorRef.current
             });
           }
-          // Verificar se ainda temos o intervalo antes de tocar
-          if (dialToneOscillatorRef.current === intervalId) {
-            playTone();
-          } else {
-            if (process.env.NODE_ENV === "development") {
-              console.warn("[SmartBell] Interval ID mismatch, stopping repetition");
-            }
-            clearInterval(intervalId);
-          }
+               // Verificar se ainda temos o intervalo antes de tocar
+               const currentInterval = dialToneOscillatorRef.current as any;
+               if (currentInterval === intervalId) {
+                 playTone();
+               } else {
+                 if (process.env.NODE_ENV === "development") {
+                   console.warn("[SmartBell] Interval ID mismatch, stopping repetition");
+                 }
+                 clearInterval(intervalId);
+               }
         }, 2000);
 
         // Armazenar interval ID para poder parar depois

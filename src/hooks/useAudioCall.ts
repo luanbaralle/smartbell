@@ -191,8 +191,8 @@ export function useAudioCall(
                 connectionState: pc.connectionState
               });
             }
-            // If connection is already stable/connected, just update state
-            if (pc.signalingState === "stable" || pc.connectionState === "connected") {
+            // If connection is already connected, just update state
+            if (pc.connectionState === "connected") {
               setConnectionState("connected");
             }
           }

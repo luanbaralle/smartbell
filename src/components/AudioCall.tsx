@@ -187,7 +187,6 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
         playsInline 
         controls={false}
         muted={false}
-        volume={1.0}
         style={{ display: "none" }}
       />
       {/* Safari/iOS may need a visible play button if autoplay fails */}

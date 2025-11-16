@@ -322,9 +322,16 @@ export function useCallState({ userId, role, onStateChange }: UseCallStateOption
     };
   }, [cleanupCall]);
 
+  // Track activeCallId in state instead of ref for render
+  const [activeCallIdState, setActiveCallIdState] = useState<string | null>(null);
+  
+  useEffect(() => {
+    setActiveCallIdState(activeCallIdRef.current);
+  }, [callsMap]);
+
   return {
     callsMap,
-    activeCallId: activeCallIdRef.current,
+    activeCallId: activeCallIdState,
     isBusy,
     createCall,
     updateCallState,

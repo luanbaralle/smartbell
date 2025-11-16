@@ -22,13 +22,16 @@ export async function sendSignalingEvent(
   event: SignalingEvent
 ): Promise<void> {
   try {
-    const { error } = await channel.send({
+    const response = await channel.send({
       type: "broadcast",
       event: "signaling",
       payload: event
     });
 
-    if (error) {
+    // RealtimeChannelSendResponse doesn't have error property in newer versions
+    // Check if response indicates success
+    if (response === "error" || (response as any)?.error) {
+      const error = response === "error" ? new Error("Failed to send signaling event") : (response as any).error;
       console.error(`[call-signaling] Error sending ${event.type}`, error);
       throw error;
     }
@@ -55,7 +58,19 @@ export function subscribeToSignalingEvents(
 
   // Retornar função de unsubscribe
   return () => {
-    channel.off("broadcast", subscription);
+    // In newer Supabase versions, off method may not exist
+    // Unsubscribe by removing the channel instead
+    try {
+      if (typeof (channel as any).off === "function") {
+        (channel as any).off("broadcast", subscription);
+      } else {
+        // Fallback: unsubscribe the entire channel
+        channel.unsubscribe();
+      }
+    } catch (error) {
+      // If unsubscribe fails, try to unsubscribe the channel
+      channel.unsubscribe();
+    }
   };
 }
 

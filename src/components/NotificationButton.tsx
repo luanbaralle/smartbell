@@ -23,8 +23,12 @@ export function NotificationButton({ onSubscribed }: NotificationButtonProps) {
 
   useEffect(() => {
     if (error) {
-      setFeedback(error);
-      const timer = setTimeout(() => setFeedback(null), 5000);
+      // Use setTimeout to avoid synchronous setState in effect
+      const timer = setTimeout(() => {
+        setFeedback(error);
+        const clearTimer = setTimeout(() => setFeedback(null), 5000);
+        return () => clearTimeout(clearTimer);
+      }, 0);
       return () => clearTimeout(timer);
     }
   }, [error]);

@@ -248,7 +248,7 @@ export function DashboardClient({
       }
     });
 
-    signalingChannelsRef.current.set(callId, { channel });
+    signalingChannelsRef.current.set(callId, { channel } as any);
     
     // Cleanup ao desmontar
     return () => {
@@ -355,11 +355,12 @@ export function DashboardClient({
         (payload) => {
           // Log para debug (remover em produção se necessário)
           if (process.env.NODE_ENV === "development") {
+            const newData = payload.new as any;
             console.log("[SmartBell] Realtime call update received", {
               event: payload.eventType,
-              callId: payload.new?.id,
-              houseId: payload.new?.house_id,
-              status: payload.new?.status
+              callId: newData?.id,
+              houseId: newData?.house_id,
+              status: newData?.status
             });
           }
           
@@ -673,9 +674,11 @@ export function DashboardClient({
     prevVideoStateRef.current = videoState;
   }, [selectedCall, audioState, videoState, handleUpdateStatus, callMap, callState]);
 
-  const handleSaveFcm = useCallback(async (token: string) => {
+  const handleSaveFcm = useCallback(async () => {
+    // NotificationButton calls onSubscribed after subscription is successful
+    // FCM token is already saved by usePushNotifications hook
     try {
-      await saveFcmToken(token);
+      // Token is already saved by the hook, just refresh if needed
     } catch (error) {
       console.error(error);
     }
@@ -1018,7 +1021,7 @@ export function DashboardClient({
                   <CardTitle className="text-sm">Notificações Push</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <NotificationButton onToken={handleSaveFcm} />
+                  <NotificationButton onSubscribed={handleSaveFcm} />
                 </CardContent>
               </Card>
             </div>

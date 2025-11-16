@@ -36,7 +36,7 @@ async function sendWebPushNotification(
 ): Promise<boolean> {
   try {
     // Dynamic import of web-push (only if available)
-    const webpush = await import("web-push").catch(() => null);
+    const webpush = await import("web-push").catch(() => null) as any;
     
     if (!webpush) {
       console.warn("[SmartBell] web-push library not installed. Install with: npm install web-push");
@@ -93,8 +93,7 @@ async function sendWebPushNotification(
         await supabaseAdminClient
           .from("push_subscriptions")
           .delete()
-          .eq("endpoint", subscription.endpoint)
-          .catch(() => {});
+          .eq("endpoint", subscription.endpoint);
       }
     } else {
       console.error("[SmartBell] Web push send error", error);
@@ -126,12 +125,13 @@ export async function sendPushToUser(
 
   let successCount = 0;
   const promises = subscriptions.map(async (sub) => {
+    const subData = sub as any;
     const success = await sendWebPushNotification(
       {
-        endpoint: sub.endpoint,
+        endpoint: subData.endpoint,
         keys: {
-          p256dh: sub.p256dh,
-          auth: sub.auth
+          p256dh: subData.p256dh,
+          auth: subData.auth
         }
       },
       payload

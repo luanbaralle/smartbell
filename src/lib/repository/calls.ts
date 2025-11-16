@@ -59,8 +59,9 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     throw new Error("Supabase admin client not configured.");
   }
 
+  // Type assertion necessário porque CallStatus inclui "ended" mas Database type não
   const updateData: Database["public"]["Tables"]["calls"]["Update"] = {
-    status
+    status: status as "pending" | "answered" | "missed" | undefined
   };
 
   if (status === "answered") {
@@ -71,8 +72,8 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     updateData.ended_at = new Date().toISOString();
   }
 
-  const { error } = await supabaseAdminClient
-    .from("calls")
+  const query = supabaseAdminClient.from("calls") as any;
+  const { error } = await query
     .update(updateData)
     .eq("id", callId);
 

@@ -119,8 +119,9 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     throw new Error("Call ID is required.");
   }
 
+  // Type assertion necessário porque CallStatus inclui "ended" mas Database type não
   const updatePayload: Database["public"]["Tables"]["calls"]["Update"] = {
-    status,
+    status: status as "pending" | "answered" | "missed" | undefined,
     ended_at:
       status === "missed" || status === "answered" || status === "ended"
         ? new Date().toISOString()

@@ -82,16 +82,17 @@ export async function POST(request: Request) {
 
     if (existing) {
       // Update existing subscription
-      const updateData: Database["public"]["Tables"]["push_subscriptions"]["Update"] = {
+      const updatePayload: Database["public"]["Tables"]["push_subscriptions"]["Update"] = {
         p256dh,
         auth,
         updated_at: new Date().toISOString()
       };
       
-      const { error: updateError } = await supabase
-        .from("push_subscriptions")
-        .update(updateData)
-        .eq("id", existing.id);
+      const existingId = (existing as { id: string }).id;
+      const query = supabase.from("push_subscriptions") as any;
+      const { error: updateError } = await query
+        .update(updatePayload)
+        .eq("id", existingId);
 
       if (updateError) {
         console.error("[SmartBell] Push subscription update error", updateError);
@@ -101,18 +102,20 @@ export async function POST(request: Request) {
         );
       }
 
-      return NextResponse.json({ message: "Subscription atualizada", id: existing.id });
+      return NextResponse.json({ message: "Subscription atualizada", id: existingId });
     }
 
     // Create new subscription
-    const { data, error } = await supabase
-      .from("push_subscriptions")
-      .insert({
-        user_id: user.id,
-        endpoint,
-        p256dh,
-        auth
-      })
+    const insertPayload: Database["public"]["Tables"]["push_subscriptions"]["Insert"] = {
+      user_id: user.id,
+      endpoint,
+      p256dh,
+      auth
+    };
+    
+    const insertQuery = supabase.from("push_subscriptions") as any;
+    const { data, error } = await insertQuery
+      .insert(insertPayload)
       .select("id")
       .single();
 

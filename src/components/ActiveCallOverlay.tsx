@@ -42,7 +42,7 @@ export function ActiveCallOverlay({
                 Chamada em Andamento
               </h2>
               <p className="text-base text-muted-foreground">
-                Conectado com <span className="font-semibold text-foreground">{call.house?.name || "Interfone"}</span>
+                Conectado com <span className="font-semibold text-foreground">{(call as any).house?.name || "Interfone"}</span>
               </p>
             </div>
           </div>
