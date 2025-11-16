@@ -66,6 +66,9 @@ export function DashboardClient({
   calls,
   messages
 }: DashboardClientProps) {
+  // Validar que profile existe - usar valor padrão seguro
+  const safeProfile = profile && profile.id ? profile : null;
+  
   const houseLookup = useMemo(() => {
     const map = new Map<string, House>();
     houses.forEach((house) => map.set(house.id, house));
@@ -139,7 +142,7 @@ export function DashboardClient({
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
   const callState = useCallState({
-    userId: profile.id,
+    userId: safeProfile?.id || "",
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
@@ -225,13 +228,13 @@ export function DashboardClient({
     
     // Detectar quando visitante encerra a chamada
     // Verificar se foi o visitante que encerrou (from !== profile.id)
-    if (event.type === "call.hangup") {
-      const isFromResident = event.from === profile.id;
+    if (event.type === "call.hangup" && safeProfile) {
+      const isFromResident = event.from === safeProfile.id;
       
       if (process.env.NODE_ENV === "development") {
         console.log(`[DashboardClient] Processing call.hangup event`, {
           from: event.from,
-          profileId: profile.id,
+          profileId: safeProfile.id,
           isFromResident,
           callEndedByResident,
           callEndedByVisitor
@@ -253,7 +256,7 @@ export function DashboardClient({
         setCallEndedByResident(false);
       }
     }
-  }, [callState?.handleSignalingEvent, profile.id, callEndedByResident, callEndedByVisitor]);
+  }, [callState?.handleSignalingEvent, safeProfile?.id, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -315,14 +318,14 @@ export function DashboardClient({
               type: "call.request",
               callId: call.id,
               from: call.session_id || "visitor",
-              to: profile.id,
+              to: safeProfile?.id || "",
               timestamp: Date.now()
             });
           }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
-  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, safeProfile?.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -377,8 +380,10 @@ export function DashboardClient({
   const prevVideoStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
 
   useEffect(() => {
+    if (!safeProfile) return;
+    
     const { supabase, channel } = createRealtimeChannel(
-      `dashboard-calls:${profile.id}`
+      `dashboard-calls:${safeProfile.id}`
     );
 
     // Subscribe to all calls for houses owned by this user
@@ -501,7 +506,7 @@ export function DashboardClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [housesList, houseLookup, profile.id]);
+  }, [housesList, houseLookup, safeProfile?.id]);
 
   useEffect(() => {
     if (!selectedCallId) return;
@@ -582,7 +587,7 @@ export function DashboardClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             callId: selectedCallId,
-            sender: profile.id,
+            sender: safeProfile?.id || "",
             content
           })
         });
@@ -595,7 +600,7 @@ export function DashboardClient({
         setIsSending(false);
       }
     },
-    [profile.id, selectedCallId]
+    [safeProfile?.id, selectedCallId]
   );
 
   const handleQuickReply = useCallback(
@@ -630,12 +635,12 @@ export function DashboardClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           callId: selectedCallId,
-          sender: profile.id,
+          sender: safeProfile?.id || "",
           audioUrl: url
         })
       });
     },
-    [callMap, profile.id, selectedCallId]
+    [callMap, safeProfile?.id, selectedCallId]
   );
 
   const handleUpdateStatus = useCallback(
@@ -782,7 +787,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.accept(callToAccept, profile.id, call.session_id || "visitor")
+          createSignalingEvent.accept(callToAccept, safeProfile?.id || "", call.session_id || "visitor")
         );
       }
       
@@ -795,7 +800,7 @@ export function DashboardClient({
       console.error("[SmartBell] Error accepting call", error);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, safeProfile?.id, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
     const callToReject = activeIncomingCall?.id || selectedCallId;
@@ -808,7 +813,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.reject(callToReject, profile.id, call.session_id || "visitor", "user_reject")
+          createSignalingEvent.reject(callToReject, safeProfile?.id || "", call.session_id || "visitor", "user_reject")
         );
       }
       
@@ -825,7 +830,7 @@ export function DashboardClient({
     } catch (error) {
       console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [activeIncomingCall, selectedCallId, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, callState, safeProfile?.id, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -897,7 +902,7 @@ export function DashboardClient({
               if (channel && call) {
                 await sendSignalingEvent(
                   channel.channel,
-                  createSignalingEvent.hangup(selectedCallId, profile.id, call.session_id || "visitor", "user_end")
+                  createSignalingEvent.hangup(selectedCallId, safeProfile?.id || "", call.session_id || "visitor", "user_end")
                 );
               }
               
