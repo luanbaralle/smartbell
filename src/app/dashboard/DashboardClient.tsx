@@ -190,7 +190,14 @@ export function DashboardClient({
         sendSignalingEvent(channel.channel, rejectEvent).catch(console.error);
       }
     }
-  }, [callState]);
+    
+    // Detectar quando visitante encerra a chamada
+    if (event.type === "call.hangup" && !callEndedByResident && !callEndedByVisitor) {
+      // Visitante encerrou a chamada
+      setCallEndedByVisitor(true);
+      setCallEndedByResident(false);
+    }
+  }, [callState, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -781,8 +788,24 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
+      {/* Call Ended Overlay - Shows when call is ended */}
+      {(callEndedByResident || callEndedByVisitor) && selectedCall && (
+        <CallEndedOverlay
+          endedBy={callEndedByResident ? "self" : "other"}
+          otherPartyLabel="visitante"
+          onClose={() => {
+            setCallEndedByResident(false);
+            setCallEndedByVisitor(false);
+            // Limpar estado local se houver callId
+            if (selectedCallId) {
+              callState.cleanupCall(selectedCallId);
+            }
+          }}
+        />
+      )}
+
       {/* Active Call Overlay - Shows on top of everything */}
-      {hasActiveCall && selectedCall && (
+      {hasActiveCall && selectedCall && !callEndedByResident && !callEndedByVisitor && (
         <ActiveCallOverlay
           call={selectedCall}
           audioState={audioState}
@@ -806,6 +829,10 @@ export function DashboardClient({
               
               // Limpar estado local
               callState.cleanupCall(selectedCallId);
+              
+              // Marcar que o morador encerrou a chamada
+              setCallEndedByResident(true);
+              setCallEndedByVisitor(false);
               
               // Atualizar status no banco
               if (selectedCall?.status === "answered") {
