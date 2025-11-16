@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { QRDisplay } from "@/components/QRDisplay";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
 import { ActiveCallOverlay } from "@/components/ActiveCallOverlay";
+import { CallEndedOverlay } from "@/components/CallEndedOverlay";
 import { Button } from "@/components/ui/button";
 import {
   Card,

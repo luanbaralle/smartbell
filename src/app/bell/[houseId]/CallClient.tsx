@@ -21,6 +21,7 @@ import { AudioRecorder } from "@/components/AudioRecorder";
 import { AudioCall } from "@/components/AudioCall";
 import { VideoCall } from "@/components/VideoCall";
 import { StatusBadge } from "@/components/StatusBadge";
+import { CallEndedOverlay } from "@/components/CallEndedOverlay";
 import { Bell, Phone, Video, MessageSquare, PhoneOff, Clock } from "lucide-react";
 import { useAudioCall } from "@/hooks/useAudioCall";
 import { useVideoCall } from "@/hooks/useVideoCall";
@@ -64,6 +65,7 @@ export function CallClient({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [wasConnected, setWasConnected] = useState(false); // Track if call was connected
   const [callEndedByResident, setCallEndedByResident] = useState(false); // Track if call was ended by resident
+  const [callEndedByVisitor, setCallEndedByVisitor] = useState(false); // Track if call was ended by visitor (self)
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const callId = currentCall?.id ?? null;
@@ -645,7 +647,7 @@ export function CallClient({
    */
   const handleSignalingEvent = useCallback((event: SignalingEvent) => {
     // Não processar eventos se chamada já foi encerrada (evitar loops)
-    if (callEndedByResident && (event.type === "call.reject" || event.type === "call.hangup" || event.type === "call.status")) {
+    if ((callEndedByResident || callEndedByVisitor) && (event.type === "call.reject" || event.type === "call.hangup" || event.type === "call.status")) {
       if (process.env.NODE_ENV === "development") {
         console.log(`[CallClient] Ignoring ${event.type} event - call already ended`);
       }
@@ -671,8 +673,10 @@ export function CallClient({
         }
       } else if (localCall.state === "ended") {
         // Chamada encerrada - só setar se ainda não foi setado (evitar loops)
-        if (!callEndedByResident) {
+        // Se não foi o visitante que encerrou, foi o morador
+        if (!callEndedByResident && !callEndedByVisitor) {
           setCallEndedByResident(true);
+          setCallEndedByVisitor(false);
           setIntent("idle");
           stopDialToneSafely();
         }
@@ -689,14 +693,15 @@ export function CallClient({
       }
     } else if (event.type === "call.hangup") {
       // Chamada encerrada pelo morador - só setar se ainda não foi setado
-      if (!callEndedByResident) {
+      if (!callEndedByResident && !callEndedByVisitor) {
         stopDialToneSafely();
         setCallEndedByResident(true);
+        setCallEndedByVisitor(false);
         setStatusMessage("Chamada encerrada pelo morador.");
         setIntent("idle");
       }
     }
-  }, [callState, callEndedByResident, stopDialToneSafely]);
+  }, [callState, callEndedByResident, callEndedByVisitor, stopDialToneSafely]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -740,7 +745,11 @@ export function CallClient({
   const handleRequestVoiceCall = useCallback(() => {
     // Reset call ended state when starting a new call
     setCallEndedByResident(false);
+    setCallEndedByVisitor(false);
     setWasConnected(false);
+    prevCallEndedByResidentRef.current = false;
+    prevWasConnectedRef.current = false;
+    webrtcInitiatedRef.current = null; // Reset WebRTC ref para permitir nova chamada
     startCalling(async () => {
       try {
         // Criar chamada no banco
@@ -945,6 +954,7 @@ export function CallClient({
                     setIntent("idle");
                     setWasConnected(false);
                     setCallEndedByResident(false); // Visitor ended, not resident
+                    setCallEndedByVisitor(true); // Visitor ended the call
                     stopDialToneSafely();
                   } catch (error) {
                     console.error("[CallClient] Error hanging up", error);
@@ -956,55 +966,31 @@ export function CallClient({
           </Card>
         )}
 
-        {/* Call Ended Overlay - Show fullscreen when call was ended by resident */}
-        {callEndedByResident && (
-          <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-red-950/95 via-slate-950/95 to-slate-950/95 backdrop-blur-md">
-            <div className="flex h-full flex-col items-center justify-center p-6">
-              <div className="w-full max-w-md space-y-8 text-center">
-                <div className="flex justify-center">
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-                    <div className="relative h-28 w-28 rounded-full bg-red-500/40 flex items-center justify-center border-4 border-red-500/50">
-                      <PhoneOff className="h-14 w-14 text-red-400" />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-3xl font-bold text-red-400">
-                    Chamada Encerrada
-                  </h2>
-                  <p className="text-base text-slate-400">
-                    O morador encerrou a chamada.
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => {
-                    // Limpar estado local se houver callId
-                    if (callId) {
-                      callState.cleanupCall(callId);
-                    }
-                    
-                    // Reset todos os estados e refs
-                    setCallEndedByResident(false);
-                    setWasConnected(false);
-                    setStatusMessage(null);
-                    setIntent("idle");
-                    stopDialToneSafely(); // Ensure dial tone is stopped
-                    dialToneCallIdRef.current = null; // Clear dial tone ref
-                    webrtcInitiatedRef.current = null; // Clear WebRTC ref
-                    prevCallEndedByResidentRef.current = false;
-                    prevWasConnectedRef.current = false;
-                    prevAudioStateRef.current = "idle";
-                  }}
-                  className="w-full h-14 text-lg"
-                >
-                  Fechar
-                </Button>
-              </div>
-            </div>
-          </div>
+        {/* Call Ended Overlay - Show fullscreen when call was ended */}
+        {(callEndedByResident || callEndedByVisitor) && (
+          <CallEndedOverlay
+            endedBy={callEndedByVisitor ? "self" : "other"}
+            otherPartyLabel="morador"
+            onClose={() => {
+              // Limpar estado local se houver callId
+              if (callId) {
+                callState.cleanupCall(callId);
+              }
+              
+              // Reset todos os estados e refs
+              setCallEndedByResident(false);
+              setCallEndedByVisitor(false);
+              setWasConnected(false);
+              setStatusMessage(null);
+              setIntent("idle");
+              stopDialToneSafely(); // Ensure dial tone is stopped
+              dialToneCallIdRef.current = null; // Clear dial tone ref
+              webrtcInitiatedRef.current = null; // Clear WebRTC ref
+              prevCallEndedByResidentRef.current = false;
+              prevWasConnectedRef.current = false;
+              prevAudioStateRef.current = "idle";
+            }}
+          />
         )}
 
         {/* Video Call */}
