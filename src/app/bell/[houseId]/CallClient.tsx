@@ -736,7 +736,8 @@ export function CallClient({
 
   const showChat = intent === "text" || (currentCall && currentCall.type === "text" && intent !== "audio-active" && intent !== "video-active");
   // Don't show audio call UI if call was ended by resident
-  const showAudioCall = (intent === "audio-active" || audioState !== "idle") && !callEndedByResident;
+  // Mostrar quando intent é "audio" (chamando) ou "audio-active" (conectado), ou quando audioState não é idle
+  const showAudioCall = (intent === "audio" || intent === "audio-active" || audioState !== "idle") && !callEndedByResident && !!currentCall;
   const showVideoCall = (intent === "video-active" || videoState !== "idle") && !callEndedByResident;
 
   return (

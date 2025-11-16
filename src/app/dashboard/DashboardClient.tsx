@@ -232,21 +232,39 @@ export function DashboardClient({
       if (call.status === "pending" && call.type === "audio") {
         setupSignalingChannel(call.id);
         
-        // Se é uma nova chamada, processar como call.request
-        const localCall = callState.getCall(call.id);
-        if (!localCall) {
-          // Simular evento call.request (vindo do visitante)
-          handleSignalingEvent({
-            type: "call.request",
-            callId: call.id,
-            from: call.session_id || "visitor",
-            to: profile.id,
-            timestamp: Date.now()
-          });
+        // Selecionar automaticamente a chamada se não houver chamada selecionada ou se for nova
+        if (!selectedCallId || call.id !== selectedCallId) {
+          // Verificar se é uma nova chamada (não existe no callState ainda)
+          const localCall = callState.getCall(call.id);
+          if (!localCall) {
+            // Selecionar a chamada automaticamente
+            setSelectedCallId(call.id);
+            
+            // Simular evento call.request (vindo do visitante)
+            handleSignalingEvent({
+              type: "call.request",
+              callId: call.id,
+              from: call.session_id || "visitor",
+              to: profile.id,
+              timestamp: Date.now()
+            });
+          }
+        } else {
+          // Chamada já selecionada, apenas processar se não existe no callState
+          const localCall = callState.getCall(call.id);
+          if (!localCall) {
+            handleSignalingEvent({
+              type: "call.request",
+              callId: call.id,
+              from: call.session_id || "visitor",
+              to: profile.id,
+              timestamp: Date.now()
+            });
+          }
         }
       }
     });
-  }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel]);
+  }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Tocar ring tone quando há chamada ringing E há offer pendente
