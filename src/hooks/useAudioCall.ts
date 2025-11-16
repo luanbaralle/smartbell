@@ -246,16 +246,42 @@ export function useAudioCall(
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       
       // Verificar APIs disponíveis (moderna e legada para Safari iOS)
-      const hasModernAPI = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-      const legacyGetUserMedia = (navigator as any).getUserMedia || 
-                                 (navigator as any).webkitGetUserMedia || 
-                                 (navigator as any).mozGetUserMedia;
+      // No Safari iOS, a API pode não estar disponível até tentarmos usar
+      const hasModernAPI = typeof navigator !== "undefined" && 
+                          navigator.mediaDevices && 
+                          typeof navigator.mediaDevices.getUserMedia === "function";
       
+      const nav = navigator as any;
+      const legacyGetUserMedia = typeof navigator !== "undefined" && (
+        (typeof nav.getUserMedia === "function") ||
+        (typeof nav.webkitGetUserMedia === "function") ||
+        (typeof nav.mozGetUserMedia === "function")
+      ) ? (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia) : null;
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Checking getUserMedia APIs", {
+          hasNavigator: typeof navigator !== "undefined",
+          hasMediaDevices: typeof navigator !== "undefined" && !!navigator.mediaDevices,
+          hasModernAPI,
+          hasLegacyAPI: !!legacyGetUserMedia,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "undefined",
+          isHTTPS: typeof window !== "undefined" ? window.location.protocol === "https:" : false
+        });
+      }
+      
+      // Se nenhuma API estiver disponível, tentar mesmo assim
+      // porque alguns navegadores só disponibilizam após tentativa real
       if (!hasModernAPI && !legacyGetUserMedia) {
         if (process.env.NODE_ENV === "development") {
-          console.warn("[useAudioCall] No getUserMedia API available");
+          console.warn("[useAudioCall] No getUserMedia API detected, but will try anyway");
         }
-        throw new Error("Seu navegador não suporta acesso ao microfone");
+        // Tentar usar a API moderna mesmo que não tenha sido detectada
+        // (pode estar disponível mas não detectável até tentarmos)
+        if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+          // Continuar e tentar usar navigator.mediaDevices.getUserMedia
+        } else {
+          throw new Error("Seu navegador não suporta acesso ao microfone. Certifique-se de estar usando HTTPS e um navegador atualizado.");
+        }
       }
       
       // Para mobile/Safari, usar constraints mais simples
@@ -290,28 +316,76 @@ export function useAudioCall(
         });
       }
       
-      // Tentar primeiro com API moderna
+      // Tentar obter stream - tentar múltiplas abordagens
       let stream: MediaStream;
-      try {
-        if (hasModernAPI) {
-          // Tentar primeiro com constraints específicas
+      let lastError: any = null;
+      
+      // Tentativa 1: API moderna com constraints específicas
+      if (hasModernAPI || (typeof navigator !== "undefined" && navigator.mediaDevices)) {
+        try {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useAudioCall] Attempting to use modern API with constraints", audioConstraints);
+          }
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: audioConstraints,
+            video: false
+          });
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useAudioCall] Successfully got stream with specific constraints");
+          }
+        } catch (error: any) {
+          lastError = error;
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[useAudioCall] Failed with specific constraints, trying minimal", error);
+          }
+          
+          // Tentativa 2: API moderna com constraints mínimas
           try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              audio: audioConstraints,
-              video: false
-            });
-          } catch (error) {
-            // Se falhar, tentar com constraints mínimas (apenas true)
-            if (process.env.NODE_ENV === "development") {
-              console.warn("[useAudioCall] Failed with specific constraints, trying minimal", error);
-            }
             stream = await navigator.mediaDevices.getUserMedia({
               audio: true,
               video: false
             });
+            if (process.env.NODE_ENV === "development") {
+              console.log("[useAudioCall] Successfully got stream with minimal constraints");
+            }
+          } catch (error2: any) {
+            lastError = error2;
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[useAudioCall] Failed with minimal constraints", error2);
+            }
+            
+            // Tentativa 3: API legada (se disponível)
+            if (legacyGetUserMedia) {
+              try {
+                if (process.env.NODE_ENV === "development") {
+                  console.log("[useAudioCall] Attempting to use legacy API");
+                }
+                stream = await new Promise<MediaStream>((resolve, reject) => {
+                  legacyGetUserMedia.call(
+                    navigator,
+                    { audio: true, video: false },
+                    resolve,
+                    reject
+                  );
+                });
+                if (process.env.NODE_ENV === "development") {
+                  console.log("[useAudioCall] Successfully got stream with legacy API");
+                }
+              } catch (error3: any) {
+                lastError = error3;
+                throw error3;
+              }
+            } else {
+              throw error2;
+            }
           }
-        } else if (legacyGetUserMedia) {
-          // Usar API legada (Safari iOS antigo)
+        }
+      } else if (legacyGetUserMedia) {
+        // Tentar apenas API legada
+        try {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useAudioCall] Attempting to use legacy API only");
+          }
           stream = await new Promise<MediaStream>((resolve, reject) => {
             legacyGetUserMedia.call(
               navigator,
@@ -320,18 +394,35 @@ export function useAudioCall(
               reject
             );
           });
-        } else {
-          throw new Error("No getUserMedia API available");
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useAudioCall] Successfully got stream with legacy API");
+          }
+        } catch (error: any) {
+          lastError = error;
+          throw error;
         }
-      } catch (error: any) {
-        if (process.env.NODE_ENV === "development") {
-          console.error("[useAudioCall] Error getting user media", error);
+      } else {
+        throw new Error("Seu navegador não suporta acesso ao microfone. Certifique-se de estar usando HTTPS e um navegador atualizado.");
+      }
+      
+      // Tratamento de erros
+      if (!stream) {
+        if (lastError) {
+          if (process.env.NODE_ENV === "development") {
+            console.error("[useAudioCall] Failed to get stream", lastError);
+          }
+          // Mensagens de erro mais específicas
+          if (lastError.name === "NotAllowedError" || lastError.name === "PermissionDeniedError") {
+            throw new Error("Permissão de microfone negada. Por favor, permita o acesso ao microfone nas configurações do navegador.");
+          } else if (lastError.name === "NotFoundError" || lastError.name === "DevicesNotFoundError") {
+            throw new Error("Nenhum microfone encontrado. Verifique se há um microfone conectado.");
+          } else if (lastError.name === "NotReadableError" || lastError.name === "TrackStartError") {
+            throw new Error("Não foi possível acessar o microfone. Pode estar sendo usado por outro aplicativo.");
+          } else {
+            throw new Error(`Erro ao acessar microfone: ${lastError.message || lastError.name || "Erro desconhecido"}`);
+          }
         }
-        // Se for erro de permissão negada, dar mensagem mais clara
-        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
-          throw new Error("Permissão de microfone negada. Por favor, permita o acesso ao microfone nas configurações do navegador.");
-        }
-        throw error;
+        throw new Error("Não foi possível obter acesso ao microfone.");
       }
 
       if (process.env.NODE_ENV === "development") {
