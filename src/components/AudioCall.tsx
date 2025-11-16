@@ -21,7 +21,36 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
       "smartbell-remote-audio"
     ) as HTMLAudioElement | null;
     if (!audioElement) return;
+    
+    // Set the stream
     audioElement.srcObject = remoteStream;
+    
+    // For mobile browsers, we need to explicitly play the audio
+    // and handle autoplay restrictions
+    const playPromise = audioElement.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[AudioCall] Audio playback started successfully");
+          }
+        })
+        .catch((error) => {
+          // Autoplay was prevented - this is common on mobile
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[AudioCall] Autoplay prevented, user interaction may be required", error);
+          }
+          // Try to play again when user interacts
+          const tryPlayOnInteraction = () => {
+            audioElement.play().catch(() => {});
+            document.removeEventListener("click", tryPlayOnInteraction);
+            document.removeEventListener("touchstart", tryPlayOnInteraction);
+          };
+          document.addEventListener("click", tryPlayOnInteraction, { once: true });
+          document.addEventListener("touchstart", tryPlayOnInteraction, { once: true });
+        });
+    }
   }, [remoteStream]);
 
   const isConnected = state === "connected";
@@ -59,7 +88,13 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
           {state === "idle" && "Sessão finalizada."}
         </p>
       </div>
-      <audio id="smartbell-remote-audio" autoPlay />
+      <audio 
+        id="smartbell-remote-audio" 
+        autoPlay 
+        playsInline 
+        controls={false}
+        style={{ display: "none" }}
+      />
       <Button 
         variant={isConnected ? "destructive" : "outline"} 
         onClick={(e) => {

@@ -205,18 +205,47 @@ export function useAudioCall(
   }, [sendSignal]);
 
   const startLocalAudio = useCallback(async () => {
-    if (!navigator.mediaDevices) return null;
+    if (!navigator.mediaDevices) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[useAudioCall] navigator.mediaDevices not available");
+      }
+      return null;
+    }
     if (localStream) return localStream;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false
-    });
+    try {
+      // Request microphone access with better constraints for mobile
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          // Mobile-specific constraints
+          sampleRate: 48000,
+          channelCount: 1
+        },
+        video: false
+      });
 
-    const pc = ensurePeerConnection();
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    setLocalStream(stream);
-    return stream;
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Microphone access granted", {
+          tracks: stream.getAudioTracks().length,
+          trackSettings: stream.getAudioTracks().map(t => t.getSettings())
+        });
+      }
+
+      const pc = ensurePeerConnection();
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+        // Enable track to ensure it's active
+        track.enabled = true;
+      });
+      setLocalStream(stream);
+      return stream;
+    } catch (error) {
+      console.error("[useAudioCall] Error accessing microphone", error);
+      throw error;
+    }
   }, [ensurePeerConnection, localStream]);
 
   const initiateCall = useCallback(
