@@ -170,9 +170,6 @@ export function CallClient({
     }
 
     // Verificar se já iniciamos WebRTC para esta chamada
-    // Usar um ref separado para rastrear se WebRTC foi iniciado
-    const webrtcInitiatedRef = useRef<string | null>(null);
-    
     if (webrtcInitiatedRef.current === callId) {
       if (process.env.NODE_ENV === "development") {
         console.log("[CallClient] WebRTC já iniciado para esta chamada, ignorando", { callId });
