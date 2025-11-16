@@ -16,6 +16,8 @@ type AudioCallProps = {
 
 export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProps) {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const [audioPaused, setAudioPaused] = useState(true);
+  const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
   
   useEffect(() => {
     if (!remoteStream) {
