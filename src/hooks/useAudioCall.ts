@@ -258,16 +258,50 @@ export function useAudioCall(
       if (process.env.NODE_ENV === "development") {
         console.log("[useAudioCall] Microphone access granted", {
           tracks: stream.getAudioTracks().length,
-          trackSettings: stream.getAudioTracks().map(t => t.getSettings())
+          trackSettings: stream.getAudioTracks().map(t => ({
+            id: t.id,
+            kind: t.kind,
+            enabled: t.enabled,
+            readyState: t.readyState,
+            muted: t.muted,
+            settings: t.getSettings()
+          }))
         });
       }
 
+      // IMPORTANTE: O peer connection deve já existir antes de adicionar tracks
+      // Isso é garantido porque startLocalAudio é chamado DEPOIS de ensurePeerConnection
       const pc = ensurePeerConnection();
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-        // Enable track to ensure it's active
+      
+      // Adicionar cada track ao peer connection
+      stream.getAudioTracks().forEach((track) => {
+        // Enable track before adding
         track.enabled = true;
+        pc.addTrack(track, stream);
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log("[useAudioCall] Added audio track to peer connection", {
+            trackId: track.id,
+            trackKind: track.kind,
+            trackEnabled: track.enabled,
+            trackReadyState: track.readyState
+          });
+        }
       });
+      
+      // Verificar se os tracks foram adicionados
+      const senders = pc.getSenders();
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useAudioCall] Tracks added to peer connection", {
+          sendersCount: senders.length,
+          senders: senders.map(s => ({
+            trackId: s.track?.id,
+            trackKind: s.track?.kind,
+            trackEnabled: s.track?.enabled
+          }))
+        });
+      }
+      
       setLocalStream(stream);
       return stream;
     } catch (error) {
