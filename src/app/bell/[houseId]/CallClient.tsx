@@ -644,6 +644,14 @@ export function CallClient({
    * Handler para eventos de sinalização recebidos
    */
   const handleSignalingEvent = useCallback((event: SignalingEvent) => {
+    // Não processar eventos se chamada já foi encerrada (evitar loops)
+    if (callEndedByResident && (event.type === "call.reject" || event.type === "call.hangup" || event.type === "call.status")) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[CallClient] Ignoring ${event.type} event - call already ended`);
+      }
+      return;
+    }
+    
     if (process.env.NODE_ENV === "development") {
       console.log(`[CallClient] Received signaling event: ${event.type} for call ${event.callId}`);
     }
@@ -655,10 +663,12 @@ export function CallClient({
     const localCall = callState.getCall(event.callId);
     if (localCall) {
       if (localCall.state === "in_call") {
-        // Chamada aceita
-        setWasConnected(true);
-        setIntent("audio-active");
-        stopDialToneSafely();
+        // Chamada aceita - só processar se não foi encerrada
+        if (!callEndedByResident) {
+          setWasConnected(true);
+          setIntent("audio-active");
+          stopDialToneSafely();
+        }
       } else if (localCall.state === "ended") {
         // Chamada encerrada - só setar se ainda não foi setado (evitar loops)
         if (!callEndedByResident) {
@@ -686,7 +696,7 @@ export function CallClient({
         setIntent("idle");
       }
     }
-  }, [callState, stopDialToneSafely]);
+  }, [callState, callEndedByResident, stopDialToneSafely]);
 
   /**
    * Configurar canal de sinalização para uma chamada
