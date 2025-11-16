@@ -980,10 +980,24 @@ export function CallClient({
                     // Enviar evento call.hangup via sinalização
                     const channel = signalingChannelsRef.current.get(callId);
                     if (channel && currentCall) {
-                      await sendSignalingEvent(
-                        channel.channel,
-                        createSignalingEvent.hangup(callId, visitorIdRef.current, house.owner_id, "user_end")
-                      );
+                      const hangupEvent = createSignalingEvent.hangup(callId, visitorIdRef.current, house.owner_id, "user_end");
+                      if (process.env.NODE_ENV === "development") {
+                        console.log(`[CallClient] Sending call.hangup event`, {
+                          callId,
+                          from: visitorIdRef.current,
+                          to: house.owner_id,
+                          event: hangupEvent
+                        });
+                      }
+                      await sendSignalingEvent(channel.channel, hangupEvent);
+                    } else {
+                      if (process.env.NODE_ENV === "development") {
+                        console.warn(`[CallClient] Cannot send call.hangup - channel or call not found`, {
+                          hasChannel: !!channel,
+                          hasCall: !!currentCall,
+                          callId
+                        });
+                      }
                     }
                     
                     // Limpar estado local

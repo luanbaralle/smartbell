@@ -34,13 +34,8 @@ export function useCallSounds() {
           console.error("[SmartBell] Error stopping dial tone", error);
         }
       }
-    } else {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SmartBell] stopDialTone called but no interval running", {
-          stack: new Error().stack
-        });
-      }
     }
+    // Remover log quando não há intervalo - é normal chamar múltiplas vezes
   }, []);
 
   // Criar tom de chamada (dial tone) - som repetitivo como telefone tocando (tuuu, tuuu, tuuu...)
