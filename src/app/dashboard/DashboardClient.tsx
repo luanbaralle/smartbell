@@ -566,14 +566,39 @@ export function DashboardClient({
 
   const handleUpdateStatus = useCallback(
     async (status: CallStatus) => {
-      if (!selectedCallId) return;
+      if (!selectedCallId) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[DashboardClient] handleUpdateStatus called but no selectedCallId");
+        }
+        return;
+      }
+      
+      // Verificar se a chamada ainda existe no callMap antes de atualizar
+      const call = callMap[selectedCallId];
+      if (!call) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[DashboardClient] handleUpdateStatus called but call not found in callMap", selectedCallId);
+        }
+        return;
+      }
+      
       try {
         await updateCallStatus(selectedCallId, status);
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[DashboardClient] Successfully updated call ${selectedCallId} to status ${status}`);
+        }
       } catch (error) {
-        console.error(error);
+        // Não mostrar erro se a chamada já foi atualizada ou não existe mais
+        if (error instanceof Error && error.message.includes("Não foi possível atualizar")) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn(`[DashboardClient] Failed to update call status (call may have been deleted or already updated):`, error);
+          }
+        } else {
+          console.error("[DashboardClient] Error updating call status", error);
+        }
       }
     },
-    [selectedCallId]
+    [selectedCallId, callMap]
   );
 
   // Detect when call is ended (hung up) and update status to "ended"
