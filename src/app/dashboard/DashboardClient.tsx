@@ -66,8 +66,8 @@ export function DashboardClient({
   calls,
   messages
 }: DashboardClientProps) {
-  // Validar que profile existe - usar valor padrão seguro
-  const safeProfile = profile && profile.id ? profile : null;
+  // Profile já foi validado no page.tsx antes de renderizar este componente
+  // Não precisamos validar novamente aqui para evitar problemas de hidratação
   
   const houseLookup = useMemo(() => {
     const map = new Map<string, House>();
@@ -142,7 +142,7 @@ export function DashboardClient({
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
   const callState = useCallState({
-    userId: safeProfile?.id || "",
+    userId: profile.id,
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
@@ -228,13 +228,13 @@ export function DashboardClient({
     
     // Detectar quando visitante encerra a chamada
     // Verificar se foi o visitante que encerrou (from !== profile.id)
-    if (event.type === "call.hangup" && safeProfile) {
-      const isFromResident = event.from === safeProfile.id;
+    if (event.type === "call.hangup") {
+      const isFromResident = event.from === profile.id;
       
       if (process.env.NODE_ENV === "development") {
         console.log(`[DashboardClient] Processing call.hangup event`, {
           from: event.from,
-          profileId: safeProfile.id,
+          profileId: profile.id,
           isFromResident,
           callEndedByResident,
           callEndedByVisitor
@@ -256,7 +256,7 @@ export function DashboardClient({
         setCallEndedByResident(false);
       }
     }
-  }, [callState?.handleSignalingEvent, safeProfile?.id, callEndedByResident, callEndedByVisitor]);
+  }, [callState?.handleSignalingEvent, profile.id, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -318,14 +318,14 @@ export function DashboardClient({
               type: "call.request",
               callId: call.id,
               from: call.session_id || "visitor",
-              to: safeProfile?.id || "",
+              to: profile.id,
               timestamp: Date.now()
             });
           }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
-  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, safeProfile?.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -380,10 +380,8 @@ export function DashboardClient({
   const prevVideoStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
 
   useEffect(() => {
-    if (!safeProfile) return;
-    
     const { supabase, channel } = createRealtimeChannel(
-      `dashboard-calls:${safeProfile.id}`
+      `dashboard-calls:${profile.id}`
     );
 
     // Subscribe to all calls for houses owned by this user
@@ -506,7 +504,7 @@ export function DashboardClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [housesList, houseLookup, safeProfile?.id]);
+  }, [housesList, houseLookup, profile.id]);
 
   useEffect(() => {
     if (!selectedCallId) return;
@@ -587,7 +585,7 @@ export function DashboardClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             callId: selectedCallId,
-            sender: safeProfile?.id || "",
+            sender: profile.id,
             content
           })
         });
@@ -600,7 +598,7 @@ export function DashboardClient({
         setIsSending(false);
       }
     },
-    [safeProfile?.id, selectedCallId]
+    [profile.id, selectedCallId]
   );
 
   const handleQuickReply = useCallback(
@@ -635,12 +633,12 @@ export function DashboardClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           callId: selectedCallId,
-          sender: safeProfile?.id || "",
+          sender: profile.id,
           audioUrl: url
         })
       });
     },
-    [callMap, safeProfile?.id, selectedCallId]
+    [callMap, profile.id, selectedCallId]
   );
 
   const handleUpdateStatus = useCallback(
@@ -787,7 +785,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.accept(callToAccept, safeProfile?.id || "", call.session_id || "visitor")
+          createSignalingEvent.accept(callToAccept, profile.id, call.session_id || "visitor")
         );
       }
       
@@ -800,7 +798,7 @@ export function DashboardClient({
       console.error("[SmartBell] Error accepting call", error);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, safeProfile?.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile.id, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
     const callToReject = activeIncomingCall?.id || selectedCallId;
@@ -813,7 +811,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.reject(callToReject, safeProfile?.id || "", call.session_id || "visitor", "user_reject")
+          createSignalingEvent.reject(callToReject, profile.id, call.session_id || "visitor", "user_reject")
         );
       }
       
@@ -830,7 +828,7 @@ export function DashboardClient({
     } catch (error) {
       console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [activeIncomingCall, selectedCallId, callState, safeProfile?.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, callState, profile.id, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -864,18 +862,6 @@ export function DashboardClient({
       signalingChannelsRef.current.clear();
     };
   }, []);
-
-  // Renderizar erro se profile não existe (após todos os hooks)
-  if (!safeProfile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-primary/5 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Erro ao carregar perfil</h1>
-          <p className="text-muted-foreground">Por favor, recarregue a página.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
@@ -914,7 +900,7 @@ export function DashboardClient({
               if (channel && call) {
                 await sendSignalingEvent(
                   channel.channel,
-                  createSignalingEvent.hangup(selectedCallId, safeProfile?.id || "", call.session_id || "visitor", "user_end")
+                  createSignalingEvent.hangup(selectedCallId, profile.id, call.session_id || "visitor", "user_end")
                 );
               }
               

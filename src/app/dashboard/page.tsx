@@ -216,9 +216,11 @@ export default async function DashboardPage({
     );
   }
 
+  // Passar profile como não-null para evitar problemas de hidratação
+  // O profile já foi validado acima, então podemos garantir que não é null
   return (
     <DashboardClient
-      profile={profile}
+      profile={profile as UserProfile}
       houses={houses}
       calls={allCalls}
       messages={messageMap}
