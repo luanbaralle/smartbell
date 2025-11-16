@@ -82,13 +82,15 @@ export async function POST(request: Request) {
 
     if (existing) {
       // Update existing subscription
+      const updateData: Database["public"]["Tables"]["push_subscriptions"]["Update"] = {
+        p256dh,
+        auth,
+        updated_at: new Date().toISOString()
+      };
+      
       const { error: updateError } = await supabase
         .from("push_subscriptions")
-        .update({
-          p256dh,
-          auth,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq("id", existing.id);
 
       if (updateError) {
