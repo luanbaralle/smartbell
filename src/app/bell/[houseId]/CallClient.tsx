@@ -647,9 +647,14 @@ export function CallClient({
    */
   const handleSignalingEvent = useCallback((event: SignalingEvent) => {
     // Não processar eventos se chamada já foi encerrada (evitar loops)
-    if ((callEndedByResident || callEndedByVisitor) && (event.type === "call.reject" || event.type === "call.hangup" || event.type === "call.status")) {
+    // EXCETO se for um call.hangup do outro lado (para mostrar overlay correto)
+    const isOwnHangup = event.type === "call.hangup" && event.from === visitorIdRef.current;
+    const shouldIgnore = (callEndedByResident || callEndedByVisitor) && 
+                        (event.type === "call.reject" || event.type === "call.status" || isOwnHangup);
+    
+    if (shouldIgnore) {
       if (process.env.NODE_ENV === "development") {
-        console.log(`[CallClient] Ignoring ${event.type} event - call already ended`);
+        console.log(`[CallClient] Ignoring ${event.type} event - call already ended or own hangup`);
       }
       return;
     }
