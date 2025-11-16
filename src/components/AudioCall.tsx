@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Phone, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -98,13 +98,48 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
     
     attemptPlay();
     
+    // Monitor audio element state
+    const checkAudioState = () => {
+      setAudioPaused(audioElement.paused);
+    };
+    
+    audioElement.addEventListener("play", checkAudioState);
+    audioElement.addEventListener("pause", checkAudioState);
+    
     // Also try to play when the stream gets new tracks (Safari quirk)
     remoteStream.getAudioTracks().forEach(track => {
       track.addEventListener("unmute", () => {
-        audioElement.play().catch(() => {});
+        audioElement.play().catch(() => {
+          setNeedsUserInteraction(true);
+        });
       });
     });
+    
+    // Check initial state
+    checkAudioState();
+    
+    return () => {
+      audioElement.removeEventListener("play", checkAudioState);
+      audioElement.removeEventListener("pause", checkAudioState);
+    };
   }, [remoteStream]);
+  
+  // Handler para ativar áudio manualmente (Safari/iOS)
+  const handleActivateAudio = useCallback(async () => {
+    const audioElement = audioElementRef.current;
+    if (!audioElement) return;
+    
+    try {
+      await audioElement.play();
+      setNeedsUserInteraction(false);
+      setAudioPaused(false);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AudioCall] Audio activated manually");
+      }
+    } catch (error) {
+      console.error("[AudioCall] Failed to activate audio", error);
+    }
+  }, []);
 
   const isConnected = state === "connected";
 
@@ -151,8 +186,27 @@ export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProp
         autoPlay 
         playsInline 
         controls={false}
+        muted={false}
+        volume={1.0}
         style={{ display: "none" }}
       />
+      {/* Safari/iOS may need a visible play button if autoplay fails */}
+      {isConnected && remoteStream && (audioPaused || needsUserInteraction) && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs text-yellow-500 text-center">
+            Áudio disponível mas não está reproduzindo
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleActivateAudio}
+            className="bg-green-500 hover:bg-green-600 text-white"
+          >
+            <Phone className="mr-2 h-4 w-4" />
+            Ativar Áudio
+          </Button>
+        </div>
+      )}
       <Button 
         variant={isConnected ? "destructive" : "outline"} 
         onClick={(e) => {
