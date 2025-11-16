@@ -790,6 +790,18 @@ export function DashboardClient({
           hasPendingOffer={!!audioPendingOffer && activeIncomingCall.id === selectedCallIdValue}
         />
       )}
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === "development" && activeIncomingCall && (
+        <div style={{ position: "fixed", bottom: 10, right: 10, background: "rgba(0,0,0,0.8)", color: "white", padding: "10px", fontSize: "12px", zIndex: 99999, borderRadius: "8px" }}>
+          <div><strong>Debug Info:</strong></div>
+          <div>Active Call: {activeIncomingCall.id}</div>
+          <div>Selected: {selectedCallIdValue || "none"}</div>
+          <div>Has Offer: {audioPendingOffer ? "✅ YES" : "❌ NO"}</div>
+          <div>Match: {activeIncomingCall.id === selectedCallIdValue ? "✅" : "❌"}</div>
+          <div>Button Enabled: {!!audioPendingOffer && activeIncomingCall.id === selectedCallIdValue ? "✅" : "❌"}</div>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
