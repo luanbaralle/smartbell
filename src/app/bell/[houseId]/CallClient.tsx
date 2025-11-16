@@ -69,11 +69,8 @@ export function CallClient({
   const callId = currentCall?.id ?? null;
   
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
-  // Usar session_id como identificador do visitante (ou gerar um único)
-  const visitorIdRef = useRef<string>(() => {
-    // Gerar ID único para esta sessão do visitante
-    return `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  });
+  // Gerar ID único para esta sessão do visitante
+  const visitorIdRef = useRef<string>(`visitor-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
   
   const callState = useCallState({
     userId: visitorIdRef.current,
