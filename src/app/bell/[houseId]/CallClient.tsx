@@ -135,6 +135,9 @@ export function CallClient({
 
   // Ref para rastrear se o dial tone já foi iniciado para esta chamada
   const dialToneCallIdRef = useRef<string | null>(null);
+  // Ref separado para rastrear se WebRTC foi iniciado
+  const webrtcInitiatedRef = useRef<string | null>(null);
+  
   const stopDialToneSafely = useCallback(() => {
     if (stopDialTone) {
       stopDialTone();
@@ -166,15 +169,21 @@ export function CallClient({
       return;
     }
 
-    // Se já iniciamos o dial tone para esta chamada, não reiniciar
-    if (dialToneCallIdRef.current === callId) {
+    // Verificar se já iniciamos WebRTC para esta chamada
+    // Usar um ref separado para rastrear se WebRTC foi iniciado
+    const webrtcInitiatedRef = useRef<string | null>(null);
+    
+    if (webrtcInitiatedRef.current === callId) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CallClient] WebRTC já iniciado para esta chamada, ignorando", { callId });
+      }
       return;
     }
 
     let cancelled = false;
     
-    // Marcar que iniciamos o dial tone para esta chamada
-    dialToneCallIdRef.current = callId;
+    // Marcar que iniciamos WebRTC para esta chamada
+    webrtcInitiatedRef.current = callId;
     
     (async () => {
       try {
@@ -195,6 +204,7 @@ export function CallClient({
       } catch (error) {
         console.error("[CallClient] Error initiating audio call", error);
         if (!cancelled) {
+          webrtcInitiatedRef.current = null; // Reset em caso de erro
           setIntent("idle");
           stopDialToneSafely();
         }
