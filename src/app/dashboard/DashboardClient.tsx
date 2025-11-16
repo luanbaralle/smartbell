@@ -152,6 +152,8 @@ export function DashboardClient({
   const signalingChannelsRef = useRef<Map<string, ReturnType<typeof createSignalingChannel>>>(new Map());
 
   // Obter chamada ativa (ringing ou in_call) para mostrar no modal - ESTADO DETERMINÍSTICO
+  // Usar callsMap.size como dependência para evitar loops infinitos
+  const callsMapSize = callState.callsMap.size;
   const activeIncomingCall = useMemo(() => {
     const activeCalls = callState.getActiveCalls();
     // Priorizar chamadas com estado "ringing"
@@ -161,13 +163,13 @@ export function DashboardClient({
       return dbCall || null;
     }
     return null;
-  }, [callState, callMap]);
+  }, [callsMapSize, callState.getActiveCalls, callMap]);
 
   // Verificar se há chamada ativa (in_call) - para mostrar overlay
   const hasActiveCall = useMemo(() => {
     const activeCalls = callState.getActiveCalls();
     return activeCalls.some(call => call.state === "in_call");
-  }, [callState]);
+  }, [callsMapSize, callState.getActiveCalls]);
 
   // Extract selected call properties
   const selectedCallIdValue = selectedCall?.id;
@@ -223,7 +225,7 @@ export function DashboardClient({
         setCallEndedByResident(false);
       }
     }
-  }, [callState, callEndedByResident, callEndedByVisitor]);
+  }, [callState.handleSignalingEvent, profile.id, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -292,7 +294,7 @@ export function DashboardClient({
         }
       }
     });
-  }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -321,7 +323,7 @@ export function DashboardClient({
     } else {
       stopRingTone();
     }
-  }, [callState, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
+  }, [callsMapSize, callState.getActiveCalls, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
 
   // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
   useEffect(() => {
@@ -331,7 +333,7 @@ export function DashboardClient({
         callState.updateCallState(selectedCallId, "in_call");
       }
     }
-  }, [selectedCallId, audioState, callState]);
+  }, [selectedCallId, audioState, callsMapSize, callState.getCall, callState.updateCallState]);
 
   // Track previous connection state to detect when call ends
   const prevAudioStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
