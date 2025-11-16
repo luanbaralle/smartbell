@@ -966,7 +966,16 @@ export function CallClient({
                 call={currentCall}
                 state={audioState}
                 onHangup={async () => {
-                  if (!callId) return;
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(`[CallClient] onHangup called`, { callId, hasCurrentCall: !!currentCall });
+                  }
+                  
+                  if (!callId) {
+                    if (process.env.NODE_ENV === "development") {
+                      console.warn(`[CallClient] onHangup called but no callId`);
+                    }
+                    return;
+                  }
                   
                   try {
                     // Marcar que o visitante encerrou ANTES de fazer outras operações
@@ -974,12 +983,32 @@ export function CallClient({
                     setCallEndedByVisitor(true);
                     setCallEndedByResident(false);
                     
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] Set callEndedByVisitor=true, callEndedByResident=false`);
+                    }
+                    
                     // Encerrar via WebRTC
                     await hangupAudioCall();
                     
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] WebRTC hangup completed`);
+                    }
+                    
                     // Enviar evento call.hangup via sinalização
-                    const channel = signalingChannelsRef.current.get(callId);
-                    if (channel && currentCall) {
+                    // IMPORTANTE: Fazer isso ANTES de limpar o estado local
+                    const channelEntry = signalingChannelsRef.current.get(callId);
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] Checking signaling channel`, {
+                        callId,
+                        hasChannelEntry: !!channelEntry,
+                        hasChannel: !!channelEntry?.channel,
+                        hasCurrentCall: !!currentCall,
+                        signalingChannelsSize: signalingChannelsRef.current.size,
+                        signalingChannelKeys: Array.from(signalingChannelsRef.current.keys())
+                      });
+                    }
+                    
+                    if (channelEntry?.channel && currentCall) {
                       const hangupEvent = createSignalingEvent.hangup(callId, visitorIdRef.current, house.owner_id, "user_end");
                       if (process.env.NODE_ENV === "development") {
                         console.log(`[CallClient] Sending call.hangup event`, {
@@ -989,18 +1018,22 @@ export function CallClient({
                           event: hangupEvent
                         });
                       }
-                      await sendSignalingEvent(channel.channel, hangupEvent);
+                      await sendSignalingEvent(channelEntry.channel, hangupEvent);
+                      if (process.env.NODE_ENV === "development") {
+                        console.log(`[CallClient] call.hangup event sent successfully`);
+                      }
                     } else {
                       if (process.env.NODE_ENV === "development") {
                         console.warn(`[CallClient] Cannot send call.hangup - channel or call not found`, {
-                          hasChannel: !!channel,
+                          hasChannelEntry: !!channelEntry,
+                          hasChannel: !!channelEntry?.channel,
                           hasCall: !!currentCall,
                           callId
                         });
                       }
                     }
                     
-                    // Limpar estado local
+                    // Limpar estado local DEPOIS de enviar o evento
                     callState.cleanupCall(callId);
                     
                     setIntent("idle");
