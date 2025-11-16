@@ -106,7 +106,35 @@ export function useAudioCall(
         }
       },
       onTrack: (event) => {
-        setRemoteStream(event.streams[0]);
+        const stream = event.streams[0];
+        if (process.env.NODE_ENV === "development") {
+          console.log("[useAudioCall] onTrack event", {
+            trackKind: event.track.kind,
+            trackId: event.track.id,
+            trackEnabled: event.track.enabled,
+            trackReadyState: event.track.readyState,
+            streamsCount: event.streams.length,
+            hasStream: !!stream,
+            audioTracks: stream?.getAudioTracks().length || 0
+          });
+        }
+        
+        if (stream) {
+          // Ensure audio tracks are enabled
+          stream.getAudioTracks().forEach(track => {
+            track.enabled = true;
+            if (process.env.NODE_ENV === "development") {
+              console.log("[useAudioCall] Audio track enabled", {
+                trackId: track.id,
+                enabled: track.enabled,
+                readyState: track.readyState,
+                muted: track.muted
+              });
+            }
+          });
+        }
+        
+        setRemoteStream(stream);
         setConnectionState("connected");
       }
     });

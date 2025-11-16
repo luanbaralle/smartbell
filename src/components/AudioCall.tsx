@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Phone, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,42 +15,93 @@ type AudioCallProps = {
 };
 
 export function AudioCall({ call, state, onHangup, remoteStream }: AudioCallProps) {
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  
   useEffect(() => {
-    if (!remoteStream) return;
+    if (!remoteStream) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AudioCall] No remoteStream available");
+      }
+      return;
+    }
+    
     const audioElement = document.getElementById(
       "smartbell-remote-audio"
     ) as HTMLAudioElement | null;
-    if (!audioElement) return;
+    if (!audioElement) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[AudioCall] Audio element not found");
+      }
+      return;
+    }
+    
+    audioElementRef.current = audioElement;
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("[AudioCall] Setting up remote audio stream", {
+        hasStream: !!remoteStream,
+        tracks: remoteStream.getAudioTracks().length,
+        trackEnabled: remoteStream.getAudioTracks().map(t => t.enabled),
+        trackReadyState: remoteStream.getAudioTracks().map(t => t.readyState)
+      });
+    }
     
     // Set the stream
     audioElement.srcObject = remoteStream;
     
-    // For mobile browsers, we need to explicitly play the audio
-    // and handle autoplay restrictions
-    const playPromise = audioElement.play();
+    // For Safari/iOS, we need to set volume and ensure element is ready
+    audioElement.volume = 1.0;
+    audioElement.muted = false;
     
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
+    // Safari requires explicit play() call and may need user interaction
+    const attemptPlay = async () => {
+      try {
+        // Wait a bit for Safari to process the stream
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const playPromise = audioElement.play();
+        
+        if (playPromise !== undefined) {
+          await playPromise;
           if (process.env.NODE_ENV === "development") {
             console.log("[AudioCall] Audio playback started successfully");
           }
-        })
-        .catch((error) => {
-          // Autoplay was prevented - this is common on mobile
-          if (process.env.NODE_ENV === "development") {
-            console.warn("[AudioCall] Autoplay prevented, user interaction may be required", error);
+        }
+      } catch (error) {
+        // Autoplay was prevented - this is common on Safari/iOS
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[AudioCall] Autoplay prevented, will try on user interaction", error);
+        }
+        
+        // Safari/iOS requires user interaction to play audio
+        // Create a button overlay to allow user to start audio
+        const tryPlayOnInteraction = async () => {
+          try {
+            await audioElement.play();
+            if (process.env.NODE_ENV === "development") {
+              console.log("[AudioCall] Audio started after user interaction");
+            }
+          } catch (err) {
+            console.error("[AudioCall] Failed to play audio after interaction", err);
           }
-          // Try to play again when user interacts
-          const tryPlayOnInteraction = () => {
-            audioElement.play().catch(() => {});
-            document.removeEventListener("click", tryPlayOnInteraction);
-            document.removeEventListener("touchstart", tryPlayOnInteraction);
-          };
-          document.addEventListener("click", tryPlayOnInteraction, { once: true });
-          document.addEventListener("touchstart", tryPlayOnInteraction, { once: true });
-        });
-    }
+          document.removeEventListener("click", tryPlayOnInteraction);
+          document.removeEventListener("touchstart", tryPlayOnInteraction);
+        };
+        
+        // Listen for any user interaction
+        document.addEventListener("click", tryPlayOnInteraction, { once: true });
+        document.addEventListener("touchstart", tryPlayOnInteraction, { once: true });
+      }
+    };
+    
+    attemptPlay();
+    
+    // Also try to play when the stream gets new tracks (Safari quirk)
+    remoteStream.getAudioTracks().forEach(track => {
+      track.addEventListener("unmute", () => {
+        audioElement.play().catch(() => {});
+      });
+    });
   }, [remoteStream]);
 
   const isConnected = state === "connected";
