@@ -30,7 +30,16 @@ export function useWebRTCSignaling(
   const supabaseRef = useRef<ReturnType<typeof createRealtimeChannel>["supabase"] | null>(null);
 
   useEffect(() => {
-    if (!callId) return;
+    if (!callId) {
+      channelRef.current = null;
+      supabaseRef.current = null;
+      return;
+    }
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("[useWebRTCSignaling] Setting up channel", { callId });
+    }
+    
     const { supabase, channel } = createRealtimeChannel(`webrtc:${callId}`);
     supabaseRef.current = supabase;
     channelRef.current = channel;
@@ -44,6 +53,10 @@ export function useWebRTCSignaling(
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR") {
           console.error("[SmartBell] erro no canal de sinalização");
+        } else if (status === "SUBSCRIBED") {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[useWebRTCSignaling] Channel subscribed successfully", { callId });
+          }
         }
       });
 
@@ -56,14 +69,28 @@ export function useWebRTCSignaling(
 
   const sendSignal = useCallback(
     async (message: Omit<SignalingMessage, "from">) => {
-      if (!channelRef.current) return;
+      if (!channelRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[useWebRTCSignaling] Cannot send signal - no channel", { callId, role, messageType: message.type });
+        }
+        return;
+      }
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useWebRTCSignaling] Sending signal", { callId, role, messageType: message.type });
+      }
+      
       await channelRef.current.send({
         type: "broadcast",
         event: "signal",
         payload: { ...message, from: role }
       });
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useWebRTCSignaling] Signal sent successfully", { callId, role, messageType: message.type });
+      }
     },
-    [role]
+    [role, callId]
   );
 
   return { sendSignal };

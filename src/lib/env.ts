@@ -11,7 +11,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
   NEXT_PUBLIC_FIREBASE_APP_ID: z.string().optional(),
   NEXT_PUBLIC_FIREBASE_VAPID_KEY: z.string().optional(),
-  FCM_SERVER_KEY: z.string().optional()
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  FCM_SERVER_KEY: z.string().optional(),
+  NEXT_PUBLIC_TURN_URL: z.string().optional(),
+  NEXT_PUBLIC_TURN_USERNAME: z.string().optional(),
+  NEXT_PUBLIC_TURN_CREDENTIAL: z.string().optional()
 });
 
 const result = envSchema.safeParse({
@@ -26,7 +30,11 @@ const result = envSchema.safeParse({
     process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   NEXT_PUBLIC_FIREBASE_VAPID_KEY: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-  FCM_SERVER_KEY: process.env.FCM_SERVER_KEY
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+  FCM_SERVER_KEY: process.env.FCM_SERVER_KEY,
+  NEXT_PUBLIC_TURN_URL: process.env.NEXT_PUBLIC_TURN_URL,
+  NEXT_PUBLIC_TURN_USERNAME: process.env.NEXT_PUBLIC_TURN_USERNAME,
+  NEXT_PUBLIC_TURN_CREDENTIAL: process.env.NEXT_PUBLIC_TURN_CREDENTIAL
 });
 
 if (!result.success) {

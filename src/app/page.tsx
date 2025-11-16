@@ -1,6 +1,13 @@
 import { SignInCard } from "@/components/SignInCard";
 
-export default function HomePage() {
+type HomePageProps = {
+  searchParams: Promise<{ redirect?: string }>;
+};
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams;
+  const redirectTo = params.redirect || "/dashboard";
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="absolute inset-0 bg-grid-pattern opacity-5" />
@@ -16,7 +23,7 @@ export default function HomePage() {
         </div>
 
         <div className="flex justify-center">
-          <SignInCard />
+          <SignInCard redirectTo={redirectTo} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 animate-fade-in">

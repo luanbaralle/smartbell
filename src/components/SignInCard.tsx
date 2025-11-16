@@ -18,11 +18,12 @@ import { cn } from "@/lib/utils";
 
 type SignInCardProps = {
   errorMessage?: string | null;
+  redirectTo?: string;
 };
 
 type AuthMode = "magic" | "password";
 
-export function SignInCard({ errorMessage }: SignInCardProps = {}) {
+export function SignInCard({ errorMessage, redirectTo = "/dashboard" }: SignInCardProps = {}) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("password");
   const [email, setEmail] = useState("");
@@ -64,7 +65,7 @@ export function SignInCard({ errorMessage }: SignInCardProps = {}) {
           email: email.trim(),
           password: password
         });
-        router.push("/dashboard");
+        router.push(redirectTo);
         router.refresh();
       } catch (err) {
         setError(

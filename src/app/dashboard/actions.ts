@@ -115,30 +115,58 @@ export async function updateCallStatus(callId: string, status: CallStatus) {
     throw new Error("Supabase admin client not configured.");
   }
 
+  if (!callId) {
+    throw new Error("Call ID is required.");
+  }
+
+  // Type assertion necessário porque CallStatus inclui "ended" mas Database type não
   const updatePayload: Database["public"]["Tables"]["calls"]["Update"] = {
-    status,
+    status: status as "pending" | "answered" | "missed" | undefined,
     ended_at:
-      status === "missed" || status === "answered"
+      status === "missed" || status === "answered" || status === "ended"
         ? new Date().toISOString()
         : null
   };
+  
+  // Set started_at when call is answered
+  if (status === "answered") {
+    updatePayload.started_at = new Date().toISOString();
+  }
 
   const admin = supabaseAdminClient as unknown as {
     from: (table: string) => {
       update: (values: Database["public"]["Tables"]["calls"]["Update"]) => {
-        eq: (column: string, value: string) => Promise<{ error: Error | null }>;
+        eq: (column: string, value: string) => Promise<{ error: Error | null; data: any }>;
       };
     };
   };
 
-  const { error } = await admin
+  const { error, data } = await admin
     .from("calls")
     .update(updatePayload)
     .eq("id", callId);
 
   if (error) {
-    console.error("[SmartBell] update call status error", error);
+    console.error("[SmartBell] update call status error", error, { callId, status });
+    
+    // Se a chamada não existe mais (erro 404 ou similar), não lançar erro
+    if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[SmartBell] Call ${callId} not found, skipping status update`);
+      }
+      return; // Silenciosamente retornar se a chamada não existe
+    }
+    
     throw new Error("Não foi possível atualizar a chamada.");
+  }
+  
+  // Verificar se alguma linha foi atualizada
+  if (data && Array.isArray(data) && data.length === 0) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`[SmartBell] No rows updated for call ${callId}, call may not exist`);
+    }
+    // Não lançar erro se nenhuma linha foi atualizada (chamada pode ter sido deletada)
+    return;
   }
 }
 

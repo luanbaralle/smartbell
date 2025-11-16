@@ -70,6 +70,7 @@ export interface Database {
           status: "pending" | "answered" | "missed";
           session_id: string | null;
           visitor_name: string | null;
+          started_at: string | null;
           ended_at: string | null;
         };
         Insert: {
@@ -80,6 +81,7 @@ export interface Database {
           status?: "pending" | "answered" | "missed";
           session_id?: string | null;
           visitor_name?: string | null;
+          started_at?: string | null;
           ended_at?: string | null;
         };
         Update: {
@@ -90,7 +92,37 @@ export interface Database {
           status?: "pending" | "answered" | "missed";
           session_id?: string | null;
           visitor_name?: string | null;
+          started_at?: string | null;
           ended_at?: string | null;
+        };
+      };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          endpoint?: string;
+          p256dh?: string;
+          auth?: string;
+          created_at?: string;
+          updated_at?: string;
         };
       };
       messages: {

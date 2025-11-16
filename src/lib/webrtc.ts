@@ -16,15 +16,27 @@ export type WebRTCSessionConfig = {
 export const createPeerConnection = (
   config: WebRTCSessionConfig = {}
 ): RTCPeerConnection => {
+  // Build ICE servers list
+  const iceServers: RTCIceServer[] = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ];
+
+  // Add TURN server only if credentials are provided
+  const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+  const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL || "turn:turn.smartbell.app:3478";
+
+  if (turnUsername && turnCredential && turnUrl) {
+    iceServers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential
+    });
+  }
+
   const peer = new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      {
-        urls: "turn:turn.smartbell.app:3478",
-        username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-        credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL
-      }
-    ]
+    iceServers
   });
 
   if (config.onIceCandidate) {

@@ -36,23 +36,70 @@ export function useVideoCall(
   const sendSignalRef = useRef<
     ((message: BroadcastPayload) => Promise<void>) | null
   >(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream;
+  }, [remoteStream]);
 
   const cleanup = useCallback(() => {
-    peerConnectionRef.current?.getSenders().forEach((sender) => sender.track?.stop());
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
-    localStream?.getTracks().forEach((track) => track.stop());
-    remoteStream?.getTracks().forEach((track) => track.stop());
-    setLocalStream(null);
-    setRemoteStream(null);
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.getSenders().forEach((sender) => {
+          sender.track?.stop();
+        });
+        peerConnectionRef.current.getReceivers().forEach((receiver) => {
+          receiver.track?.stop();
+        });
+        peerConnectionRef.current.close();
+      } catch (error) {
+        console.error("[SmartBell] Error closing peer connection", error);
+      }
+      peerConnectionRef.current = null;
+    }
+    
+    // Stop local stream using ref
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+      });
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
+    
+    // Stop remote stream using ref
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+      });
+      remoteStreamRef.current = null;
+      setRemoteStream(null);
+    }
+    
     setConnectionState("idle");
     setPendingOffer(null);
     candidateQueueRef.current = [];
-  }, [localStream, remoteStream]);
+  }, []);
 
   const ensurePeerConnection = useCallback(() => {
-    if (peerConnectionRef.current) return peerConnectionRef.current;
+    // If connection exists and is still valid, reuse it
+    if (peerConnectionRef.current) {
+      const state = peerConnectionRef.current.connectionState;
+      if (state !== "closed" && state !== "failed") {
+        return peerConnectionRef.current;
+      }
+      // Connection is invalid, clean it up first
+      cleanup();
+    }
 
+    // Create new connection
     const pc = createPeerConnection({
       onIceCandidate: (candidate) => {
         if (candidate) {
@@ -106,9 +153,39 @@ export function useVideoCall(
         setPendingOffer(message.sdp);
         setConnectionState("ringing");
       } else if (message.type === "answer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
-        await flushCandidates();
-        setConnectionState("connected");
+        // Only set remote description if we're in the correct signaling state
+        // (have-local-offer means we created an offer and are waiting for an answer)
+        if (pc.signalingState === "have-local-offer") {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
+            await flushCandidates();
+            setConnectionState("connected");
+          } catch (error) {
+            // If already set or in wrong state, log and continue
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[SmartBell] setRemoteDescription error (answer)", error, {
+                signalingState: pc.signalingState,
+                connectionState: pc.connectionState
+              });
+            }
+            // If connection is already connected, just update state
+            if (pc.connectionState === "connected") {
+              setConnectionState("connected");
+            }
+          }
+        } else {
+          // Already processed or in wrong state
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[SmartBell] Ignoring answer - wrong signaling state", {
+              signalingState: pc.signalingState,
+              connectionState: pc.connectionState
+            });
+          }
+          // If already connected, just ensure state is correct
+          if (pc.connectionState === "connected") {
+            setConnectionState("connected");
+          }
+        }
       } else if (message.type === "candidate") {
         if (pc.remoteDescription) {
           try {
@@ -182,11 +259,19 @@ export function useVideoCall(
     cleanup();
   }, [cleanup, sendSignal]);
 
+  // Cleanup when callId changes or component unmounts
   useEffect(() => {
     return () => {
       cleanup();
     };
-  }, [callId, cleanup]);
+  }, [callId]); // Remove cleanup from deps to avoid recreating effect
+
+  // Also cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, []);
 
   return {
     connectionState,
