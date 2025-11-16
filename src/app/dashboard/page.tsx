@@ -203,6 +203,19 @@ export default async function DashboardPage({
     {}
   );
 
+  // Garantir que profile existe antes de renderizar
+  if (!profile) {
+    console.error("[SmartBell] dashboard: profile is null after all attempts");
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4 text-white">Erro ao carregar perfil</h1>
+          <p className="text-gray-400">Não foi possível carregar seu perfil. Por favor, tente novamente.</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <DashboardClient
       profile={profile}

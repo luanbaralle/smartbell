@@ -66,6 +66,9 @@ export function DashboardClient({
   calls,
   messages
 }: DashboardClientProps) {
+  // Validar que profile existe - usar valor padrão seguro
+  const safeProfile = profile && profile.id ? profile : null;
+  
   const houseLookup = useMemo(() => {
     const map = new Map<string, House>();
     houses.forEach((house) => map.set(house.id, house));
@@ -139,7 +142,7 @@ export function DashboardClient({
 
   // NOVA ARQUITETURA: Usar useCallState para gerenciar estado determinístico
   const callState = useCallState({
-    userId: profile.id,
+    userId: safeProfile?.id || "",
     role: "callee",
     onStateChange: (callId, newState) => {
       if (process.env.NODE_ENV === "development") {
@@ -152,22 +155,46 @@ export function DashboardClient({
   const signalingChannelsRef = useRef<Map<string, ReturnType<typeof createSignalingChannel>>>(new Map());
 
   // Obter chamada ativa (ringing ou in_call) para mostrar no modal - ESTADO DETERMINÍSTICO
-  const activeIncomingCall = useMemo(() => {
-    const activeCalls = callState.getActiveCalls();
-    // Priorizar chamadas com estado "ringing"
-    const ringingCall = activeCalls.find(call => call.state === "ringing");
-    if (ringingCall) {
-      const dbCall = callMap[ringingCall.callId];
-      return dbCall || null;
+  // Usar callsMap.size como dependência para evitar loops infinitos
+  // Converter Map para Array para usar como dependência estável
+  // Verificar se callState e callsMap existem antes de acessar
+  const callsMapSize = callState?.callsMap?.size ?? 0;
+  const callsMapArray = useMemo(() => {
+    try {
+      if (!callState?.callsMap) {
+        return [];
+      }
+      return Array.from(callState.callsMap.values());
+    } catch (error) {
+      console.error("[DashboardClient] Error converting callsMap to array", error);
+      return [];
     }
-    return null;
-  }, [callState, callMap]);
+  }, [callsMapSize]);
+  const activeIncomingCall = useMemo(() => {
+    try {
+      const activeCalls = callsMapArray.filter(call => call.state === "ringing" || call.state === "in_call");
+      // Priorizar chamadas com estado "ringing"
+      const ringingCall = activeCalls.find(call => call.state === "ringing");
+      if (ringingCall) {
+        const dbCall = callMap[ringingCall.callId];
+        return dbCall || null;
+      }
+      return null;
+    } catch (error) {
+      console.error("[DashboardClient] Error in activeIncomingCall", error);
+      return null;
+    }
+  }, [callsMapArray, callMap]);
 
   // Verificar se há chamada ativa (in_call) - para mostrar overlay
   const hasActiveCall = useMemo(() => {
-    const activeCalls = callState.getActiveCalls();
-    return activeCalls.some(call => call.state === "in_call");
-  }, [callState]);
+    try {
+      return callsMapArray.some(call => call.state === "in_call");
+    } catch (error) {
+      console.error("[DashboardClient] Error in hasActiveCall", error);
+      return false;
+    }
+  }, [callsMapArray]);
 
   // Extract selected call properties
   const selectedCallIdValue = selectedCall?.id;
@@ -180,6 +207,12 @@ export function DashboardClient({
   const handleSignalingEvent = useCallback((event: SignalingEvent) => {
     if (process.env.NODE_ENV === "development") {
       console.log(`[DashboardClient] Received signaling event: ${event.type} for call ${event.callId}`);
+    }
+    
+    // Verificar se callState está disponível
+    if (!callState?.handleSignalingEvent) {
+      console.error("[DashboardClient] callState.handleSignalingEvent not available");
+      return;
     }
     
     // Processar evento através do hook de estado
@@ -195,13 +228,13 @@ export function DashboardClient({
     
     // Detectar quando visitante encerra a chamada
     // Verificar se foi o visitante que encerrou (from !== profile.id)
-    if (event.type === "call.hangup") {
-      const isFromResident = event.from === profile.id;
+    if (event.type === "call.hangup" && safeProfile) {
+      const isFromResident = event.from === safeProfile.id;
       
       if (process.env.NODE_ENV === "development") {
         console.log(`[DashboardClient] Processing call.hangup event`, {
           from: event.from,
-          profileId: profile.id,
+          profileId: safeProfile.id,
           isFromResident,
           callEndedByResident,
           callEndedByVisitor
@@ -223,7 +256,7 @@ export function DashboardClient({
         setCallEndedByResident(false);
       }
     }
-  }, [callState, callEndedByResident, callEndedByVisitor]);
+  }, [callState?.handleSignalingEvent, safeProfile?.id, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -267,7 +300,7 @@ export function DashboardClient({
         setupSignalingChannel(call.id);
         
         // Verificar se é uma nova chamada (não existe no callState ainda)
-        const localCall = callState.getCall(call.id);
+        const localCall = callState?.getCall ? callState.getCall(call.id) : null;
         if (!localCall) {
           // CRÍTICO: Selecionar a chamada IMEDIATAMENTE para que useAudioCall se inscreva no canal WebRTC
           // Isso deve acontecer ANTES do visitante enviar o offer
@@ -285,14 +318,14 @@ export function DashboardClient({
               type: "call.request",
               callId: call.id,
               from: call.session_id || "visitor",
-              to: profile.id,
+              to: safeProfile?.id || "",
               timestamp: Date.now()
             });
           }, 100); // Dar tempo para useAudioCall se inscrever
         }
       }
     });
-  }, [callMap, callState, handleSignalingEvent, profile.id, setupSignalingChannel, selectedCallId]);
+  }, [callMap, callState.getCall, callState.handleSignalingEvent, handleSignalingEvent, safeProfile?.id, setupSignalingChannel, selectedCallId]);
 
   /**
    * Monitorar quando audioPendingOffer muda para debug
@@ -313,33 +346,44 @@ export function DashboardClient({
    * Tocar ring tone quando há chamada ringing E há offer pendente
    */
   useEffect(() => {
-    const ringingCall = callState.getActiveCalls().find(call => call.state === "ringing");
-    
-    if (ringingCall && audioPendingOffer && ringingCall.callId === selectedCallIdValue) {
-      // Tocar ring tone apenas se há offer pendente (visitante iniciou WebRTC)
-      playRingTone();
-    } else {
+    try {
+      const ringingCall = callsMapArray.find(call => call.state === "ringing");
+      
+      if (ringingCall && audioPendingOffer && ringingCall.callId === selectedCallIdValue) {
+        // Tocar ring tone apenas se há offer pendente (visitante iniciou WebRTC)
+        playRingTone();
+      } else {
+        stopRingTone();
+      }
+    } catch (error) {
+      console.error("[DashboardClient] Error in ring tone effect", error);
       stopRingTone();
     }
-  }, [callState, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
+  }, [callsMapArray, audioPendingOffer, selectedCallIdValue, playRingTone, stopRingTone]);
 
   // Sincronizar estado do WebRTC com callState quando conexão é estabelecida
   useEffect(() => {
-    if (selectedCallId && audioState === "connected") {
-      const localCall = callState.getCall(selectedCallId);
-      if (localCall && localCall.state !== "in_call") {
-        callState.updateCallState(selectedCallId, "in_call");
+    if (selectedCallId && audioState === "connected" && callState?.getCall && callState?.updateCallState) {
+      try {
+        const localCall = callState.getCall(selectedCallId);
+        if (localCall && localCall.state !== "in_call") {
+          callState.updateCallState(selectedCallId, "in_call");
+        }
+      } catch (error) {
+        console.error("[DashboardClient] Error syncing call state", error);
       }
     }
-  }, [selectedCallId, audioState, callState]);
+  }, [selectedCallId, audioState, callsMapArray, callState?.getCall, callState?.updateCallState]);
 
   // Track previous connection state to detect when call ends
   const prevAudioStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
   const prevVideoStateRef = useRef<"idle" | "calling" | "ringing" | "connected">("idle");
 
   useEffect(() => {
+    if (!safeProfile) return;
+    
     const { supabase, channel } = createRealtimeChannel(
-      `dashboard-calls:${profile.id}`
+      `dashboard-calls:${safeProfile.id}`
     );
 
     // Subscribe to all calls for houses owned by this user
@@ -462,7 +506,7 @@ export function DashboardClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [housesList, houseLookup, profile.id]);
+  }, [housesList, houseLookup, safeProfile?.id]);
 
   useEffect(() => {
     if (!selectedCallId) return;
@@ -543,7 +587,7 @@ export function DashboardClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             callId: selectedCallId,
-            sender: profile.id,
+            sender: safeProfile?.id || "",
             content
           })
         });
@@ -556,7 +600,7 @@ export function DashboardClient({
         setIsSending(false);
       }
     },
-    [profile.id, selectedCallId]
+    [safeProfile?.id, selectedCallId]
   );
 
   const handleQuickReply = useCallback(
@@ -591,12 +635,12 @@ export function DashboardClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           callId: selectedCallId,
-          sender: profile.id,
+          sender: safeProfile?.id || "",
           audioUrl: url
         })
       });
     },
-    [callMap, profile.id, selectedCallId]
+    [callMap, safeProfile?.id, selectedCallId]
   );
 
   const handleUpdateStatus = useCallback(
@@ -652,7 +696,9 @@ export function DashboardClient({
     if (selectedCall.status === "answered" && (wasAudioConnected || wasVideoConnected) && isNowIdle) {
       // Call was ended - limpar estado local e atualizar status no banco
       const callIdToUpdate = selectedCall.id;
-      callState.cleanupCall(callIdToUpdate);
+      if (callState?.cleanupCall) {
+        callState.cleanupCall(callIdToUpdate);
+      }
       
       // Verificar se a chamada ainda existe antes de atualizar
       if (callMap[callIdToUpdate]) {
@@ -731,7 +777,9 @@ export function DashboardClient({
       await acceptAudioCall();
       
       // Atualizar estado local para "in_call"
-      callState.updateCallState(callToAccept, "in_call");
+      if (callState?.updateCallState) {
+        callState.updateCallState(callToAccept, "in_call");
+      }
       
       // Enviar evento call.accept via sinalização
       const channel = signalingChannelsRef.current.get(callToAccept);
@@ -739,7 +787,7 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.accept(callToAccept, profile.id, call.session_id || "visitor")
+          createSignalingEvent.accept(callToAccept, safeProfile?.id || "", call.session_id || "visitor")
         );
       }
       
@@ -752,7 +800,7 @@ export function DashboardClient({
       console.error("[SmartBell] Error accepting call", error);
       alert("Erro ao aceitar a chamada. Tente novamente.");
     }
-  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, audioPendingOffer, acceptAudioCall, callState, safeProfile?.id, callMap, stopRingTone]);
 
   const handleRejectAudioCall = useCallback(async () => {
     const callToReject = activeIncomingCall?.id || selectedCallId;
@@ -765,12 +813,14 @@ export function DashboardClient({
       if (channel && call) {
         await sendSignalingEvent(
           channel.channel,
-          createSignalingEvent.reject(callToReject, profile.id, call.session_id || "visitor", "user_reject")
+          createSignalingEvent.reject(callToReject, safeProfile?.id || "", call.session_id || "visitor", "user_reject")
         );
       }
       
       // Limpar estado local
-      callState.cleanupCall(callToReject);
+      if (callState?.cleanupCall) {
+        callState.cleanupCall(callToReject);
+      }
       
       // Atualizar status no banco
       await updateCallStatus(callToReject, "missed");
@@ -780,7 +830,7 @@ export function DashboardClient({
     } catch (error) {
       console.error("[SmartBell] Error rejecting call", error);
     }
-  }, [activeIncomingCall, selectedCallId, callState, profile.id, callMap, stopRingTone]);
+  }, [activeIncomingCall, selectedCallId, callState, safeProfile?.id, callMap, stopRingTone]);
 
   const handleAcceptVideoCall = useCallback(async () => {
     if (!selectedCallId) return;
@@ -815,6 +865,18 @@ export function DashboardClient({
     };
   }, []);
 
+  // Renderizar erro se profile não existe (após todos os hooks)
+  if (!safeProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-primary/5 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Erro ao carregar perfil</h1>
+          <p className="text-muted-foreground">Por favor, recarregue a página.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
       {/* Call Ended Overlay - Shows when call is ended */}
@@ -826,7 +888,7 @@ export function DashboardClient({
             setCallEndedByResident(false);
             setCallEndedByVisitor(false);
             // Limpar estado local se houver callId
-            if (selectedCallId) {
+            if (selectedCallId && callState?.cleanupCall) {
               callState.cleanupCall(selectedCallId);
             }
           }}
@@ -852,12 +914,14 @@ export function DashboardClient({
               if (channel && call) {
                 await sendSignalingEvent(
                   channel.channel,
-                  createSignalingEvent.hangup(selectedCallId, profile.id, call.session_id || "visitor", "user_end")
+                  createSignalingEvent.hangup(selectedCallId, safeProfile?.id || "", call.session_id || "visitor", "user_end")
                 );
               }
               
               // Limpar estado local
-              callState.cleanupCall(selectedCallId);
+              if (callState?.cleanupCall) {
+                callState.cleanupCall(selectedCallId);
+              }
               
               // Marcar que o morador encerrou a chamada
               setCallEndedByResident(true);
@@ -875,7 +939,7 @@ export function DashboardClient({
       )}
 
       {/* Incoming Call Modal - Baseado em estado determinístico */}
-      {activeIncomingCall && callState.getCall(activeIncomingCall.id)?.state === "ringing" && (
+      {activeIncomingCall && callState?.getCall && callState.getCall(activeIncomingCall.id)?.state === "ringing" && (
         <IncomingCallModal
           call={activeIncomingCall}
           open={true}
@@ -1052,20 +1116,20 @@ export function DashboardClient({
                             "w-full flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors text-left",
                             selectedCallId === call.id && "border-primary bg-primary/5",
                             selectedCallId === call.id && call.type === "audio" && audioState === "connected" && "border-green-500 bg-green-500/5",
-                            call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" && "border-green-500 bg-green-500/10 animate-pulse",
+                            call.status === "pending" && call.type === "audio" && callState?.getCall && callState.getCall(call.id)?.state === "ringing" && "border-green-500 bg-green-500/10 animate-pulse",
                             call.status === "pending" && "border-yellow-500/50 bg-yellow-500/5"
                           )}
                         >
                           <div className="flex items-center gap-4">
                             <div className={cn(
                               "h-10 w-10 rounded-full flex items-center justify-center",
-                              call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing"
+                              call.status === "pending" && call.type === "audio" && callState?.getCall && callState.getCall(call.id)?.state === "ringing"
                                 ? "bg-green-500/20 animate-pulse"
                                 : selectedCallId === call.id && call.type === "audio" && audioState === "connected"
                                 ? "bg-green-500/20"
                                 : "bg-primary/10"
                             )}>
-                              {call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" ? (
+                              {call.status === "pending" && call.type === "audio" && callState?.getCall && callState.getCall(call.id)?.state === "ringing" ? (
                                 <PhoneIncoming className="h-5 w-5 text-green-500 animate-pulse" />
                               ) : selectedCallId === call.id && call.type === "audio" && audioState === "connected" ? (
                                 <Phone className="h-5 w-5 text-green-500" />
@@ -1076,7 +1140,7 @@ export function DashboardClient({
                             <div>
                               <p className="font-medium flex items-center gap-2">
                                 {call.house.name}
-                                {call.status === "pending" && call.type === "audio" && callState.getCall(call.id)?.state === "ringing" && (
+                                {call.status === "pending" && call.type === "audio" && callState?.getCall && callState.getCall(call.id)?.state === "ringing" && (
                                   <span className="text-xs text-green-500 font-semibold animate-pulse">
                                     🔔 TOCANDO
                                   </span>
