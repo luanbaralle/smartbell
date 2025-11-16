@@ -1105,14 +1105,90 @@ export function CallClient({
             <Button
               variant="destructive"
               size="lg"
-              onClick={() => {
-                if (showAudioCall) {
-                  hangupAudioCall();
+              onClick={async () => {
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`[CallClient] Encerrar Chamada button clicked`, { 
+                    showAudioCall, 
+                    showVideoCall, 
+                    callId,
+                    hasCurrentCall: !!currentCall 
+                  });
+                }
+                
+                if (showAudioCall && callId) {
+                  // Usar a mesma lógica do onHangup do AudioCall
+                  try {
+                    // Marcar que o visitante encerrou ANTES de fazer outras operações
+                    setCallEndedByVisitor(true);
+                    setCallEndedByResident(false);
+                    
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] Set callEndedByVisitor=true, callEndedByResident=false`);
+                    }
+                    
+                    // Encerrar via WebRTC
+                    await hangupAudioCall();
+                    
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] WebRTC hangup completed`);
+                    }
+                    
+                    // Enviar evento call.hangup via sinalização
+                    const channelEntry = signalingChannelsRef.current.get(callId);
+                    if (process.env.NODE_ENV === "development") {
+                      console.log(`[CallClient] Checking signaling channel`, {
+                        callId,
+                        hasChannelEntry: !!channelEntry,
+                        hasChannel: !!channelEntry?.channel,
+                        hasCurrentCall: !!currentCall,
+                        signalingChannelsSize: signalingChannelsRef.current.size,
+                        signalingChannelKeys: Array.from(signalingChannelsRef.current.keys())
+                      });
+                    }
+                    
+                    if (channelEntry?.channel && currentCall) {
+                      const hangupEvent = createSignalingEvent.hangup(callId, visitorIdRef.current, house.owner_id, "user_end");
+                      if (process.env.NODE_ENV === "development") {
+                        console.log(`[CallClient] Sending call.hangup event`, {
+                          callId,
+                          from: visitorIdRef.current,
+                          to: house.owner_id,
+                          event: hangupEvent
+                        });
+                      }
+                      await sendSignalingEvent(channelEntry.channel, hangupEvent);
+                      if (process.env.NODE_ENV === "development") {
+                        console.log(`[CallClient] call.hangup event sent successfully`);
+                      }
+                    } else {
+                      if (process.env.NODE_ENV === "development") {
+                        console.warn(`[CallClient] Cannot send call.hangup - channel or call not found`, {
+                          hasChannelEntry: !!channelEntry,
+                          hasChannel: !!channelEntry?.channel,
+                          hasCall: !!currentCall,
+                          callId
+                        });
+                      }
+                    }
+                    
+                    // Limpar estado local DEPOIS de enviar o evento
+                    callState.cleanupCall(callId);
+                    
+                    setIntent("idle");
+                    setWasConnected(false);
+                    stopDialToneSafely();
+                  } catch (error) {
+                    console.error("[CallClient] Error hanging up", error);
+                    setCallEndedByVisitor(true);
+                    setCallEndedByResident(false);
+                  }
                 }
                 if (showVideoCall) {
                   hangupVideoCall();
                 }
-                setIntent("idle");
+                if (!showAudioCall) {
+                  setIntent("idle");
+                }
               }}
               className="w-full max-w-md"
             >
