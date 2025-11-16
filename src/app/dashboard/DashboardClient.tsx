@@ -260,7 +260,7 @@ export function DashboardClient({
         setCallEndedByResident(false);
       }
     }
-  }, [callState?.handleSignalingEvent, profile.id, callEndedByResident, callEndedByVisitor]);
+  }, [callState?.handleSignalingEvent, userId, callEndedByResident, callEndedByVisitor]);
 
   /**
    * Configurar canal de sinalização para uma chamada
@@ -510,7 +510,7 @@ export function DashboardClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [housesList, houseLookup, profile.id]);
+  }, [housesList, houseLookup, userId]);
 
   useEffect(() => {
     if (!selectedCallId) return;
@@ -639,7 +639,7 @@ export function DashboardClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           callId: selectedCallId,
-          sender: profile.id,
+          sender: userId,
           audioUrl: url
         })
       });
