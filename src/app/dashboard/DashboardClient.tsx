@@ -769,7 +769,7 @@ export function DashboardClient({
           open={true}
           onAccept={handleModalAccept}
           onReject={handleRejectAudioCall}
-          hasPendingOffer={!!audioPendingOffer && (activeIncomingCall.id === selectedCallIdValue || !selectedCallIdValue)}
+          hasPendingOffer={!!audioPendingOffer && activeIncomingCall.id === selectedCallIdValue}
         />
       )}
       {/* Header */}
