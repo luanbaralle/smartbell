@@ -865,6 +865,18 @@ export function DashboardClient({
     };
   }, []);
 
+  // Renderizar erro se profile não existe (após todos os hooks)
+  if (!safeProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-primary/5 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Erro ao carregar perfil</h1>
+          <p className="text-muted-foreground">Por favor, recarregue a página.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-primary/5">
       {/* Call Ended Overlay - Shows when call is ended */}
