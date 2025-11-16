@@ -233,12 +233,6 @@ export function useAudioCall(
   }, [sendSignal]);
 
   const startLocalAudio = useCallback(async () => {
-    if (!navigator.mediaDevices) {
-      if (process.env.NODE_ENV === "development") {
-        console.warn("[useAudioCall] navigator.mediaDevices not available");
-      }
-      return null;
-    }
     if (localStream) {
       if (process.env.NODE_ENV === "development") {
         console.log("[useAudioCall] Reusing existing local stream");
@@ -250,6 +244,19 @@ export function useAudioCall(
       // Detectar se é mobile/Safari
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      // Verificar APIs disponíveis (moderna e legada para Safari iOS)
+      const hasModernAPI = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+      const legacyGetUserMedia = (navigator as any).getUserMedia || 
+                                 (navigator as any).webkitGetUserMedia || 
+                                 (navigator as any).mozGetUserMedia;
+      
+      if (!hasModernAPI && !legacyGetUserMedia) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useAudioCall] No getUserMedia API available");
+        }
+        throw new Error("Seu navegador não suporta acesso ao microfone");
+      }
       
       // Para mobile/Safari, usar constraints mais simples
       // Constraints muito específicas podem falhar no Safari iOS
@@ -277,26 +284,54 @@ export function useAudioCall(
         console.log("[useAudioCall] Requesting microphone access", {
           isMobile,
           isSafari,
+          hasModernAPI,
+          hasLegacyAPI: !!legacyGetUserMedia,
           audioConstraints
         });
       }
       
-      // Tentar primeiro com constraints específicas
+      // Tentar primeiro com API moderna
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-          video: false
-        });
-      } catch (error) {
-        // Se falhar, tentar com constraints mínimas (apenas true)
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[useAudioCall] Failed with specific constraints, trying minimal", error);
+        if (hasModernAPI) {
+          // Tentar primeiro com constraints específicas
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: audioConstraints,
+              video: false
+            });
+          } catch (error) {
+            // Se falhar, tentar com constraints mínimas (apenas true)
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[useAudioCall] Failed with specific constraints, trying minimal", error);
+            }
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: false
+            });
+          }
+        } else if (legacyGetUserMedia) {
+          // Usar API legada (Safari iOS antigo)
+          stream = await new Promise<MediaStream>((resolve, reject) => {
+            legacyGetUserMedia.call(
+              navigator,
+              { audio: true, video: false },
+              resolve,
+              reject
+            );
+          });
+        } else {
+          throw new Error("No getUserMedia API available");
         }
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false
-        });
+      } catch (error: any) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[useAudioCall] Error getting user media", error);
+        }
+        // Se for erro de permissão negada, dar mensagem mais clara
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+          throw new Error("Permissão de microfone negada. Por favor, permita o acesso ao microfone nas configurações do navegador.");
+        }
+        throw error;
       }
 
       if (process.env.NODE_ENV === "development") {

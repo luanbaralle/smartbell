@@ -789,15 +789,22 @@ export function CallClient({
     // IMPORTANTE: No Safari iOS, não podemos solicitar permissão duas vezes
     // então vamos apenas verificar se está disponível, não solicitar aqui
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatusMessage("Seu navegador não suporta acesso ao microfone.");
+      // Verificar tanto a API moderna quanto a antiga (para Safari iOS)
+      const hasModernAPI = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+      const hasLegacyAPI = (navigator as any).getUserMedia || (navigator as any).webkitGetUserMedia || (navigator as any).mozGetUserMedia;
+      
+      if (!hasModernAPI && !hasLegacyAPI) {
+        setStatusMessage("Seu navegador não suporta acesso ao microfone. Por favor, use um navegador mais recente.");
         return;
       }
       
       // Verificar permissão sem solicitar (para não causar erro no Safari iOS)
       // A permissão será solicitada quando startLocalAudio for chamado
       if (process.env.NODE_ENV === "development") {
-        console.log("[CallClient] MediaDevices available, will request permission when starting call");
+        console.log("[CallClient] MediaDevices available", {
+          modernAPI: !!hasModernAPI,
+          legacyAPI: !!hasLegacyAPI
+        });
       }
     } catch (error) {
       console.error("[CallClient] Error checking media devices", error);
