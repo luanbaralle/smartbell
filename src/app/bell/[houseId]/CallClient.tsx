@@ -789,27 +789,42 @@ export function CallClient({
     // IMPORTANTE: No Safari iOS, não podemos solicitar permissão duas vezes
     // então vamos apenas verificar se está disponível, não solicitar aqui
     try {
-      // Verificar tanto a API moderna quanto a antiga (para Safari iOS)
-      const hasModernAPI = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-      const hasLegacyAPI = (navigator as any).getUserMedia || (navigator as any).webkitGetUserMedia || (navigator as any).mozGetUserMedia;
+      // Verificar de forma mais robusta
+      // No Safari iOS, navigator.mediaDevices pode não estar disponível imediatamente
+      const hasModernAPI = typeof navigator !== "undefined" && 
+                          navigator.mediaDevices && 
+                          typeof navigator.mediaDevices.getUserMedia === "function";
       
-      if (!hasModernAPI && !hasLegacyAPI) {
-        setStatusMessage("Seu navegador não suporta acesso ao microfone. Por favor, use um navegador mais recente.");
-        return;
+      const nav = navigator as any;
+      const hasLegacyAPI = typeof navigator !== "undefined" && (
+        (typeof nav.getUserMedia === "function") ||
+        (typeof nav.webkitGetUserMedia === "function") ||
+        (typeof nav.mozGetUserMedia === "function")
+      );
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CallClient] Checking media devices support", {
+          hasNavigator: typeof navigator !== "undefined",
+          hasMediaDevices: typeof navigator !== "undefined" && !!navigator.mediaDevices,
+          hasGetUserMedia: typeof navigator !== "undefined" && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function",
+          modernAPI: hasModernAPI,
+          legacyAPI: hasLegacyAPI,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "undefined"
+        });
       }
       
-      // Verificar permissão sem solicitar (para não causar erro no Safari iOS)
-      // A permissão será solicitada quando startLocalAudio for chamado
-      if (process.env.NODE_ENV === "development") {
-        console.log("[CallClient] MediaDevices available", {
-          modernAPI: !!hasModernAPI,
-          legacyAPI: !!hasLegacyAPI
-        });
+      // Se nenhuma API estiver disponível, ainda assim tentar prosseguir
+      // porque pode ser que a API esteja disponível quando realmente precisarmos
+      // (alguns navegadores só disponibilizam em contexto HTTPS ou após interação do usuário)
+      if (!hasModernAPI && !hasLegacyAPI) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[CallClient] No getUserMedia API detected, but will try anyway when starting call");
+        }
+        // Não bloquear aqui - deixar startLocalAudio tentar e mostrar erro apropriado se falhar
       }
     } catch (error) {
       console.error("[CallClient] Error checking media devices", error);
-      setStatusMessage("Erro ao verificar acesso ao microfone.");
-      return;
+      // Não bloquear aqui também - deixar tentar quando iniciar a chamada
     }
     
     startCalling(async () => {
